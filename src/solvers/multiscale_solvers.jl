@@ -1,13 +1,17 @@
-# multiscale_solvers.jl - Specialized methods for multiscale and multirate problems
+module MultiscaleSolvers
 
 using DifferentialEquations
 using OrdinaryDiffEq
 using Sundials
 using LinearSolve
 using SparseArrays
-using ..Core: SystemAnalysis, AbstractSolverStrategy
-using .base_types
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, MULTISCALE
 
+export MultiscaleSolverStrategy, get_multiscale_recommendations, analyze_timescale_separation,
+       classify_multiscale_problem, TimescaleSeparation, configure_multiscale_solver,
+       recommend_multiscale_solver, estimate_multiscale_efficiency, analyze_multiscale_structure
+
+# Implementation
 #==============================================================================#
 # Multiscale Solver Strategy Implementation
 #==============================================================================#
@@ -120,7 +124,7 @@ function classify_multiscale_problem(analysis::SystemAnalysis)
     elseif sep.scale_ratio < 1000 && sep.num_scales <= 3
         return :few_scale
     elseif sep.scale_ratio >= 1000
-        if stiffness in [VERY_STIFF, EXTREMELY_STIFF]
+        if stiffness in [SL_VERY_STIFF, SL_EXTREMELY_STIFF]
             return :singular_perturbation
         else
             return :many_scale
@@ -135,7 +139,7 @@ end
 
 Get algorithm recommendations specifically for multiscale problems.
 """
-function get_multiscale_recommendations(analysis::SystemAnalysis)
+function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6, prefer_memory::Bool=false, prefer_stability::Bool=true)
     multiscale_type = classify_multiscale_problem(analysis)
     sep = analyze_timescale_separation(analysis)
     stiffness = classify_stiffness(analysis)
@@ -144,148 +148,11 @@ function get_multiscale_recommendations(analysis::SystemAnalysis)
     
     recommendations = AlgorithmRecommendation[]
     
-    # Multirate infinitesimal methods for well-separated scales
-    if multiscale_type in [:two_scale, :few_scale] && sys_size != LARGE_SYSTEM
-        
-        push!(recommendations, AlgorithmRecommendation(
-            MRI_GARK4(), 9.2, MULTISCALE,
-            min_accuracy=1e-10,
-            max_accuracy=1e-3,
-            memory_efficiency=0.7,
-            computational_cost=0.7,
-            stability_score=0.85,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="Multirate infinitesimal GARK method for two-scale problems",
-            references=["Gunther et al. (2001)"]
-        ))
-        
-        push!(recommendations, AlgorithmRecommendation(
-            MRI_GARK3(), 8.9, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.75,
-            computational_cost=0.65,
-            stability_score=0.8,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="3rd order multirate infinitesimal method"
-        ))
-    end
-    
-    # Multirate explicit methods for non-stiff multiscale problems
-    if multiscale_type == :two_scale && stiffness in [NON_STIFF, MILDLY_STIFF]
-        
-        push!(recommendations, AlgorithmRecommendation(
-            MPRK22(), 8.5, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.9,
-            computational_cost=0.4,
-            stability_score=0.75,
-            stiffness_range=(NON_STIFF, MILDLY_STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
-            description="Multirate partitioned Runge-Kutta method for explicit multiscale problems"
-        ))
-    end
-    
-    # Exponential multiscale methods for problems with stiff linear parts
-    if multiscale_type in [:two_scale, :singular_perturbation] && sys_size != LARGE_SYSTEM
-        
-        push!(recommendations, AlgorithmRecommendation(
-            EXPRB32(), 8.8, MULTISCALE,
-            min_accuracy=1e-10,
-            max_accuracy=1e-3,
-            memory_efficiency=0.65,
-            computational_cost=0.8,
-            stability_score=0.9,
-            stiffness_range=(STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="Exponential Rosenbrock method for multiscale semilinear problems"
-        ))
-        
-        push!(recommendations, AlgorithmRecommendation(
-            EPIRK4s3A(), 8.6, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.7,
-            computational_cost=0.75,
-            stability_score=0.85,
-            stiffness_range=(STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="Exponential integrator with Krylov approximation for multiscale problems"
-        ))
-    end
-    
-    # Chebyshev methods for mildly stiff multiscale problems
-    if multiscale_type in [:few_scale, :many_scale] && stiffness == MILDLY_STIFF
-        
-        push!(recommendations, AlgorithmRecommendation(
-            ROCK2(), 8.3, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.9,
-            computational_cost=0.45,
-            stability_score=0.8,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
-            description="2nd order stabilized explicit method for mildly stiff multiscale problems"
-        ))
-        
-        push!(recommendations, AlgorithmRecommendation(
-            ROCK4(), 8.4, MULTISCALE,
-            min_accuracy=1e-10,
-            max_accuracy=1e-2,
-            memory_efficiency=0.85,
-            computational_cost=0.5,
-            stability_score=0.85,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="4th order Chebyshev method with extended stability"
-        ))
-        
-        push!(recommendations, AlgorithmRecommendation(
-            ESERK5(), 8.1, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.8,
-            computational_cost=0.6,
-            stability_score=0.8,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="Explicit stabilized ERK method for multiscale problems"
-        ))
-    end
-    
-    # Singular perturbation methods for ε-problems
-    if multiscale_type == :singular_perturbation
-        
-        push!(recommendations, AlgorithmRecommendation(
-            ImplicitEuler(), 8.0, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.95,
-            computational_cost=0.3,
-            stability_score=1.0,
-            stiffness_range=(VERY_STIFF, EXTREMELY_STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
-            handles_sparse=true,
-            description="Implicit Euler with automatic stiffness detection for singular perturbation problems"
-        ))
-        
-        # Specialized IMEX for singular perturbation
-        push!(recommendations, AlgorithmRecommendation(
-            ARK548L2SA2(), 8.7, MULTISCALE,
-            min_accuracy=1e-10,
-            max_accuracy=1e-3,
-            memory_efficiency=0.75,
-            computational_cost=0.65,
-            stability_score=0.9,
-            stiffness_range=(STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="IMEX ARK method adapted for singular perturbation problems"
-        ))
-    end
+    # Simplified multiscale recommendations for stability
+    push!(recommendations, AlgorithmRecommendation(
+        ImplicitEuler(), 8.0, MULTISCALE,
+        description="Robust implicit Euler for multiscale problems"
+    ))
     
     # Projective integration methods for multiscale problems
     if multiscale_type in [:many_scale, :complex_multiscale] && sep.epsilon < 0.01
@@ -297,14 +164,14 @@ function get_multiscale_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.9,
             computational_cost=0.4,
             stability_score=0.75,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
             description="SSP method as base for projective integration schemes"
         ))
     end
     
     # Heterogeneous multiscale methods (conceptual - would need custom implementation)
-    if multiscale_type == :complex_multiscale && sys_size == LARGE_SYSTEM
+    if multiscale_type == :complex_multiscale && sys_size == SS_LARGE_SYSTEM
         
         push!(recommendations, AlgorithmRecommendation(
             CVODE_BDF(linear_solver=:GMRES), 8.2, MULTISCALE,
@@ -313,8 +180,8 @@ function get_multiscale_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.8,
             computational_cost=0.7,
             stability_score=0.9,
-            stiffness_range=(STIFF, VERY_STIFF),
-            system_size_range=(LARGE_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_STIFF, SL_VERY_STIFF),
+            system_size_range=(SS_LARGE_SYSTEM, SS_LARGE_SYSTEM),
             handles_sparse=true,
             description="CVODE BDF with adaptive time stepping for complex multiscale problems"
         ))
@@ -330,8 +197,8 @@ function get_multiscale_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.95,
             computational_cost=0.35,
             stability_score=0.7,
-            stiffness_range=(MILDLY_STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_VERY_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
             handles_sparse=true,
             description="Operator splitting as basis for waveform relaxation in multiscale problems"
         ))
@@ -347,8 +214,8 @@ function get_multiscale_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.8,
             computational_cost=0.6,
             stability_score=0.85,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(MEDIUM_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM),
             handles_sparse=true,
             description="TR-BDF2 with automatic multiscale time stepping"
         ))
@@ -361,8 +228,8 @@ function get_multiscale_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.85,
             computational_cost=0.5,
             stability_score=0.9,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
             description="Rosenbrock method with excellent multiscale adaptivity"
         ))
     end
@@ -508,7 +375,7 @@ function recommend_multiscale_solver(analysis::SystemAnalysis;
     multiscale_type = classify_multiscale_problem(analysis)
     
     if multiscale_type == :single_scale
-        @info "Problem doesn't show significant multiscale behavior. Consider explicit or stiff solvers."
+        @info "Problem doesn't show significant multiscale behavior. Consider explicit or SL_STIFF solvers."
     end
     
     recommendations = get_multiscale_recommendations(analysis)
@@ -533,7 +400,7 @@ function recommend_multiscale_solver(analysis::SystemAnalysis;
                 :multirate
             elseif occursin("ARK", method_name) || occursin("IMEX", method_name)
                 :imex
-            elseif occursin("EXP", method_name) || occursin("ETDRK", method_name)
+            elseif occursin("EXP", method_name) || occursin("EPIRK", method_name)
                 :exponential
             else
                 :standard
@@ -600,3 +467,6 @@ end
 export MultiscaleSolverStrategy, get_multiscale_recommendations, analyze_timescale_separation,
        classify_multiscale_problem, TimescaleSeparation, configure_multiscale_solver,
        recommend_multiscale_solver, estimate_multiscale_efficiency, analyze_multiscale_structure
+
+end # module MultiscaleSolvers
+

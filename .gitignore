@@ -1,0 +1,14 @@
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Julia
+# (Keeping Manifest.toml is often preferred for applications, but we can add common patterns)
+*.jl.cov
+*.jl.mem
+*.jl.prof
+*.jl.stats
+
+# OS generated files
+.DS_Store
+Thumbs.db

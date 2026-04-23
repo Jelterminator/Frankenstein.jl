@@ -1,44 +1,26 @@
 module StabilityAdaptation
 
-using ..Core: SystemAnalysis
-using ..Core: AbstractAdaptationStrategy
-using ..Core: AlgorithmRecommendation
+using ...FCore: SystemAnalysis, AbstractAdaptationStrategy, AlgorithmRecommendation, StepInfo
+using ...Solvers: compute_adjusted_priority, select_best_algorithm
+
+export StabilityAdaptationStrategy, adapt!
 
 """
-    StabilityAdaptation
-
-Switch solver methods or parameters to maintain numerical stability under dynamic stiffness.
+    StabilityAdaptationStrategy
 """
-struct StabilityAdaptation <: AbstractAdaptationStrategy
+struct StabilityAdaptationStrategy <: AbstractAdaptationStrategy
     stiffness_threshold::Float64
+    StabilityAdaptationStrategy(threshold::Float64=1e4) = new(threshold)
 end
 
-"""
-    adapt!(strategy::StabilityAdaptation, analysis::SystemAnalysis, rec::AlgorithmRecommendation)
 
-Monitor system stiffness and update the algorithm recommendation if stability is at risk.
-"""
-function adapt!(strategy::StabilityAdaptation, analysis::SystemAnalysis, rec::AlgorithmRecommendation)
-    # 1. Estimate current stiffness metric from analysis
-    local_stiffness = getfield(analysis, :stiffness_ratio)
 
-    # 2. If stiffness exceeds threshold, switch to a more stable implicit solver
-    if local_stiffness > strategy.stiffness_threshold
-        # Log or mark the adaptation
-        println("[StabilityAdaptation] High stiffness detected: ", local_stiffness,
-                " > ", strategy.stiffness_threshold)
-
-        # Create a new recommendation: 
-        new_algo =select_best_algorithm(analysis)  
-        # Preserve existing tolerance and other parameters if present
-        params = hasproperty(rec, :params) ? rec.params : Dict{Symbol,Any}()
-        params[:method] = new_algo
-
-        return AlgorithmRecommendation(new_algo; params...)
+function adapt!(strategy::StabilityAdaptationStrategy, analysis::SystemAnalysis, step::StepInfo)
+    local_stiffness = analysis.stiffness_ratio
+    if local_stiffness > strategy.stiffness_threshold || step.rejects > 2
+        return select_best_algorithm(analysis)
     end
-
-    # Otherwise, leave recommendation unchanged
-    return rec
+    return nothing
 end
 
-end # module StabilityAdaptation
+end # module

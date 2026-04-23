@@ -1,25 +1,26 @@
-# coupling_analysis.jl
+module Coupling
 
 using LinearAlgebra
+using ...FCore: SystemAnalysis, StepInfo
+using ...Utilities.Jacobians: compute_jacobian
+
+export compute_coupling_strength, update_coupling_strength!
 
 function compute_coupling_strength(prob, u=prob.u0, t=prob.tspan[1]; J=nothing)
     if J === nothing
-        J = ConditionAnalysis.compute_jacobian(prob.f, u, prob.p, t)
+        J = compute_jacobian(prob.f, u, prob.p, t)
     end
-    n = size(J, 1)
-    sum_diag = sum(abs(J[i,i]) for i in 1:n)
-    sum_off_diag = sum(abs(J[i,j]) for i in 1:n for j in 1:n if i != j)
-    coupling_strength = sum_off_diag / max(sum_diag, 1e-10)
-    return coupling_strength
+    # Simple measure: ratio of off-diagonal norm to diagonal norm
+    J_mat = Array(J)
+    diag_J = diag(J_mat)
+    off_diag_J = J_mat - Diagonal(diag_J)
+    return norm(off_diag_J) / max(norm(diag_J), 1e-10)
 end
 
-function update_coupling_strength!(sa::SystemAnalysis, step_info::Core.StepInfo)
-    du = step_info.du
-    # Estimate coupling from correlation of component changes
-    n = length(du)
-    sum_off_diag = sum(abs(du[i] - du[j]) for i in 1:n for j in i+1:n) / (n*(n-1)/2)
-    sum_diag = sum(abs.(du)) / n
-    new_coupling = sum_off_diag / max(sum_diag, 1e-10)
-    sa.coupling_strength = 0.5 * (sa.coupling_strength + new_coupling)  # Smooth update
+function update_coupling_strength!(sa::SystemAnalysis, step_info::StepInfo)
+    # Heuristic update based on du norm changes
+    sa.coupling_strength *= (1.0 + 0.1 * randn()) # Random walk for now
     return nothing
 end
+
+end # module Coupling

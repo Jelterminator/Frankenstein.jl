@@ -2,9 +2,7 @@
 
 module SpecialtySolvers
 
-using ..Core: SystemAnalysis
-using ..Solvers: AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize,
-                 is_applicable, compute_adjusted_priority
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, SPECIALTY
 using OrdinaryDiffEq
 using Sundials
 
@@ -36,17 +34,17 @@ function build_specialty_solver_catalogue()
             stability_score = 0.6,
             handles_sparse = false,
             supports_events = true,
-            stiffness_range = (NON_STIFF, MILDLY_STIFF),
+            stiffness_range = (SL_NON_STIFF, SL_MILDLY_STIFF),
             references = ["https://doi.org/10.1007/s10543-011-0346-3"]),
 
         AlgorithmRecommendation(Rodas5(autodiff=false), 8.8, SPECIALTY;
-            description = "Rodas5 with manual Jacobian mode. Stable and accurate for stiff + event-rich problems.",
+            description = "Rodas5 with manual Jacobian mode. Stable and accurate for SL_STIFF + event-rich problems.",
             memory_efficiency = 0.7,
             computational_cost = 0.6,
             stability_score = 0.95,
             handles_sparse = true,
             supports_events = true,
-            stiffness_range = (STIFF, EXTREMELY_STIFF),
+            stiffness_range = (SL_STIFF, SL_EXTREMELY_STIFF),
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
         AlgorithmRecommendation(SymplecticEuler(), 6.5, SPECIALTY;
@@ -54,7 +52,7 @@ function build_specialty_solver_catalogue()
             memory_efficiency = 0.9,
             stability_score = 0.85,
             supports_events = false,
-            stiffness_range = (NON_STIFF, MILDLY_STIFF),
+            stiffness_range = (SL_NON_STIFF, SL_MILDLY_STIFF),
             references = ["https://en.wikipedia.org/wiki/Symplectic_integrator"]),
 
         AlgorithmRecommendation(Vern9(), 9.2, SPECIALTY;
@@ -63,18 +61,18 @@ function build_specialty_solver_catalogue()
             stability_score = 0.75,
             computational_cost = 0.9,
             supports_events = true,
-            stiffness_range = (NON_STIFF, MILDLY_STIFF),
+            stiffness_range = (SL_NON_STIFF, SL_MILDLY_STIFF),
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
         AlgorithmRecommendation(CVODE_BDF(linear_solver=:GMRES), 8.0, SPECIALTY;
-            description = "CVODE_BDF with GMRES for matrix-free stiff systems with event handling.",
+            description = "CVODE_BDF with GMRES for matrix-free SL_STIFF systems with event handling.",
             memory_efficiency = 0.7,
             computational_cost = 0.7,
             stability_score = 0.95,
             handles_sparse = true,
             handles_mass_matrix = true,
             supports_events = true,
-            stiffness_range = (STIFF, EXTREMELY_STIFF),
+            stiffness_range = (SL_STIFF, SL_EXTREMELY_STIFF),
             references = ["https://computing.llnl.gov/projects/sundials"])
     ]
 end
@@ -108,3 +106,5 @@ end
 export SpecialtySolverStrategy, get_specialty_recommendations
 
 end # module
+
+

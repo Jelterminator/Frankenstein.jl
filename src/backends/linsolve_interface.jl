@@ -186,7 +186,7 @@ end
 """
     select_solver_by_properties(props, problem_type, performance_priority, memory_constraints)
 
-Core solver selection logic based on matrix properties.
+FCore solver selection logic based on matrix properties.
 """
 function select_solver_by_properties(props::MatrixProperties, 
                                     problem_type::Symbol,

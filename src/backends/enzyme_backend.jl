@@ -9,11 +9,26 @@ using ADTypes
 
 # Conditional loading of Enzyme
 const ENZYME_AVAILABLE = try
-    using Enzyme
+    import Enzyme
     true
 catch
     false
 end
+
+# Implement jacobian for Enzyme
+function jacobian(::AutoEnzyme, f, x)
+    if !ENZYME_AVAILABLE
+        error("Enzyme not available")
+    end
+    # Enzyme normally wants to compute in-place or returns result
+    # For simplicity in this interface:
+    dx = zero(x)
+    J = zeros(eltype(x), length(f(x)), length(x))
+    # This is a placeholder, Enzyme usage is complex
+    # Usually: Enzyme.jacobian(f, x)
+    return Enzyme.jacobian(Enzyme.Forward, f, x)
+end
+
 
 """
     configure_enzyme(mode=:reverse)

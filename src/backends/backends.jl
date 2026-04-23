@@ -8,7 +8,7 @@ using ForwardDiff
 using FiniteDiff
 using Symbolics
 using SparseDiffTools
-using ..Core  # Access to core types
+using ..FCore  # Access to FCore types
 
 # Include backend files
 include("AD_interface.jl")
@@ -21,12 +21,14 @@ include("hybrid_backend.jl")
 include("backend_selector.jl")
 
 # Export key functions
-export select_ad_backend, select_linear_solver
+export jacobian, select_ad_backend, select_linear_solver
 export configure_preconditioner
 export configure_sparse_forwarddiff, configure_enzyme, configure_finite_diff, configure_symbolic
 
 export switch_backend, choose_backend
 export BackendPerformanceMetrics, evaluate_backend_performance
+export AutoSymbolic
+
 
 #==============================================================================#
 # Backend Performance Metrics

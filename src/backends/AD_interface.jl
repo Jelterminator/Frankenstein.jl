@@ -10,6 +10,24 @@ using LinearAlgebra
 using SparseArrays
 
 """
+    jacobian(backend, f, x)
+
+Generic function for computing Jacobians using different AD backends.
+Backends should extend this function.
+"""
+function jacobian end
+
+# Default implementations for standard backends
+function jacobian(::AutoForwardDiff, f, x)
+    return ForwardDiff.jacobian(f, x)
+end
+
+function jacobian(::AutoFiniteDiff, f, x)
+    return FiniteDiff.finite_difference_jacobian(f, x)
+end
+
+
+"""
     evaluate_backend_performance(backend, f, x, sparsity_pattern=nothing)
 
 Benchmark an AD backend's performance on a given function and input.
@@ -22,7 +40,7 @@ function evaluate_backend_performance(backend::AbstractADType, f, x, sparsity_pa
     try
         # Time Jacobian computation
         jacobian_time = @elapsed begin
-            jac = ADTypes.jacobian(backend, f, x)
+            jac = jacobian(backend, f, x)
         end
         metrics.jacobian_time = jacobian_time
         

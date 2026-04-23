@@ -25,11 +25,11 @@ function configure_symbolic()
 end
 
 """
-    ADTypes.jacobian(::AutoSymbolic, f, x)
+    jacobian(::AutoSymbolic, f, x)
 
 Compute Jacobian using symbolic differentiation.
 """
-function ADTypes.jacobian(::AutoSymbolic, f, x)
+function jacobian(::AutoSymbolic, f, x)
     # Create symbolic variables
     n = length(x)
     vars = Symbolics.@variables $(Symbol.("x", 1:n))[1:n]

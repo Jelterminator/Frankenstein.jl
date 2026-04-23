@@ -1,10 +1,12 @@
 module Utilities
 
-# Include the Jacobians submodule
+# Include the submodules
 include("jacobians.jl")
+using .Jacobians
+
 include("logging.jl")
 
-# Export functions from both Utilities and Jacobians
-export log_monster_info, finite_difference_jac, compute_jacobian
+# Export submodules and key functions
+export Jacobians, log_monster_info, finite_difference_jac, compute_jacobian
 
 end # module Utilities

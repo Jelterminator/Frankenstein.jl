@@ -2,7 +2,7 @@
 
 module Adaptation
 
-using ..Core: AbstractAdaptationStrategy, AdaptationState, SystemAnalysis, StepInfo
+using ..FCore: AbstractAdaptationStrategy, AdaptationState, SystemAnalysis, StepInfo, AlgorithmRecommendation, compute_adjusted_priority
 
 # Include individual adaptation strategy modules
 include("performance_adaptation.jl")
@@ -12,149 +12,67 @@ include("memory_adaptation.jl")
 include("parallel_adaptation.jl")
 include("hybrid_adaptation.jl")
 
-# Re-export all strategies and adapt! functions
-using .PerformanceAdaptation: PerformanceAdaptation, adapt!
-using .StabilityAdaptation: StabilityAdaptation, adapt!
-using .ConvergenceAdaptation: ConvergenceAdaptation, adapt!
-using .MemoryAdaptation: MemoryAdaptation, adapt!
-using .ParallelAdaptation: ParallelAdaptation, adapt!
-using .HybridAdaptation: HybridAdaptation, adapt!
+# Re-export all strategies
+using .PerformanceAdaptation: PerformanceAdaptationStrategy, create_adaptive_composite
+using .StabilityAdaptation: StabilityAdaptationStrategy
+using .ConvergenceAdaptation: ConvergenceAdaptationStrategy
+using .MemoryAdaptation: MemoryAdaptationStrategy
+using .ParallelAdaptation: ParallelAdaptationStrategy
+using .HybridAdaptation: HybridAdaptationStrategy
 
-# Base interface
+export PerformanceAdaptationStrategy, StabilityAdaptationStrategy, ConvergenceAdaptationStrategy,
+       MemoryAdaptationStrategy, ParallelAdaptationStrategy, HybridAdaptationStrategy,
+       AdaptationController, register_strategy!, adapt!, create_adaptive_composite
+
 """
-adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo) -> ()
+    AdaptationController
 
-Update the adaptation state and possibly switch strategies based on new step information.
+Orchestrates multiple adaptation strategies and resolves conflicts using weighted voting.
 """
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    # Default: do nothing
-    return
+mutable struct AdaptationController
+    strategies::Vector{Tuple{AbstractAdaptationStrategy, Float64}} # (strategy, weight)
+    history::Vector{Any}
+    
+    AdaptationController() = new(Tuple{AbstractAdaptationStrategy, Float64}[], Any[])
 end
 
-# Performance-based Adaptation
-struct PerformanceAdaptation <: AbstractAdaptationStrategy
-    threshold::Float64
+"""
+    register_strategy!(controller::AdaptationController, strategy::AbstractAdaptationStrategy, weight::Float64=1.0)
+"""
+function register_strategy!(controller::AdaptationController, strategy::AbstractAdaptationStrategy, weight::Float64=1.0)
+    push!(controller.strategies, (strategy, weight))
 end
 
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    strat = state.current_strategy
-    if strat isa PerformanceAdaptation
-        # If step time too long, consider switching
-        avg_dt = mean([s.dt for s in analysis.history])
-        if step.dt < strat.threshold * avg_dt
-            # record improvement
-            push!(state.history, (time=step.t, new_strat="keep current"))
-        else
-            # switch strategy example
-            new_strat = PerformanceAdaptation(strat.threshold * 0.9)
-            state.current_strategy = new_strat
-            push!(state.history, (time=step.t, new_strat=new_strat))
+"""
+    adapt!(controller::AdaptationController, analysis::SystemAnalysis, step::StepInfo) -> AlgorithmRecommendation
+"""
+function adapt!(controller::AdaptationController, analysis::SystemAnalysis, step::StepInfo)
+    votes = Dict{Any, Float64}() # algorithm_type => weighted_score
+    recs = Dict{Any, AlgorithmRecommendation}()
+    
+    for (strategy, strategy_weight) in controller.strategies
+        rec = adapt!(strategy, analysis, step)
+        if rec !== nothing
+            alg_type = typeof(rec.algorithm)
+            priority = compute_adjusted_priority(rec, analysis)
+            
+            score = strategy_weight * priority
+            votes[alg_type] = get(votes, alg_type, 0.0) + score
+            recs[alg_type] = rec
         end
     end
-end
-
-# Stability-based Adaptation
-struct StabilityAdaptation <: AbstractAdaptationStrategy
-    max_error_ratio::Float64
-end
-
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    strat = state.current_strategy
-    if strat isa StabilityAdaptation
-        # if error ratio too high, switch to more stable solver
-        if step.error / step.dt > strat.max_error_ratio
-            # example switch
-            new_strat = StabilityAdaptation(strat.max_error_ratio * 0.5)
-            state.current_strategy = new_strat
-            push!(state.history, (time=step.t, new_strat=new_strat))
-        else
-            push!(state.history, (time=step.t, new_strat="stable"))
-        end
+    
+    if isempty(votes)
+        return nothing
     end
+    
+    best_alg_type = argmax(votes)
+    return recs[best_alg_type]
 end
 
-# Convergence-based Adaptation
-struct ConvergenceAdaptation <: AbstractAdaptationStrategy
-    tol::Float64
+# Base interface fallback
+function adapt!(strategy::AbstractAdaptationStrategy, analysis::SystemAnalysis, step::StepInfo)
+    return nothing
 end
-
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    strat = state.current_strategy
-    if strat isa ConvergenceAdaptation
-        if step.error > strat.tol
-            # tighten tolerance
-            new_strat = ConvergenceAdaptation(strat.tol * 0.5)
-            state.current_strategy = new_strat
-            push!(state.history, (time=step.t, new_strat=new_strat))
-        else
-            push!(state.history, (time=step.t, new_strat="converged"))
-        end
-    end
-end
-
-# Hybrid Adaptation
-struct HybridAdaptation <: AbstractAdaptationStrategy
-    perf_thresh::Float64
-    stab_thresh::Float64
-end
-
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    strat = state.current_strategy
-    if strat isa HybridAdaptation
-        # combine performance and stability checks
-        avg_dt = mean([s.dt for s in analysis.history])
-        if step.dt > strat.perf_thresh * avg_dt || step.error / step.dt > strat.stab_thresh
-            # switch strategy heuristically
-            new_strat = PerformanceAdaptation(strat.perf_thresh * 0.9)
-            state.current_strategy = new_strat
-            push!(state.history, (time=step.t, new_strat=new_strat))
-        else
-            push!(state.history, (time=step.t, new_strat="hybrid ok"))
-        end
-    end
-end
-
-# Memory-based Adaptation
-struct MemoryAdaptation <: AbstractAdaptationStrategy
-    window::Int
-end
-
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    strat = state.current_strategy
-    if strat isa MemoryAdaptation
-        # use sliding window of last dt’s to decide
-        recent = last(analysis.history, min(length(analysis.history), strat.window))
-        avg_dt = mean([s.dt for s in recent])
-        if step.dt > avg_dt
-            # slow down
-            state.current_strategy = MemoryAdaptation(strat.window + 1)
-            push!(state.history, (time=step.t, new_strat=state.current_strategy))
-        else
-            push!(state.history, (time=step.t, new_strat="memory ok"))
-        end
-    end
-end
-
-# Parallel Adaptation
-struct ParallelAdaptation <: AbstractAdaptationStrategy
-    max_threads::Int
-end
-
-function adapt!(state::AdaptationState, analysis::SystemAnalysis, step::StepInfo)
-    strat = state.current_strategy
-    if strat isa ParallelAdaptation
-        # evaluate parallel efficiency (placeholder)
-        if step.dt > (analysis.system_size / strat.max_threads)
-            state.current_strategy = ParallelAdaptation(strat.max_threads + 1)
-            push!(state.history, (time=step.t, new_strat=state.current_strategy))
-        else
-            push!(state.history, (time=step.t, new_strat="parallel ok"))
-        end
-    end
-end
-
-export PerformanceAdaptation, StabilityAdaptation, ConvergenceAdaptation,
-       MemoryAdaptation, ParallelAdaptation, HybridAdaptation,
-       adapt!
 
 end # module Adaptation

@@ -16,19 +16,50 @@ using OrdinaryDiffEq
 using Sundials
 using LinearSolve
 using SparseArrays
-using ..Core: SystemAnalysis, AbstractSolverStrategy
+using ..FCore: FCore, SystemAnalysis, AbstractSolverStrategy
+
+# Re-export enums from FCore
+using ..FCore: SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel,
+             SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF,
+             SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM,
+             AlgorithmRecommendation,
+             classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior,
+             is_applicable, compute_adjusted_priority
+
+export SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel,
+       SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF,
+       SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM,
+       AlgorithmRecommendation,
+       classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior,
+       is_applicable, compute_adjusted_priority
 
 # Include all solver strategy modules
-include("base_types.jl")
 include("explicit_solvers.jl")
+using .ExplicitSolvers
+
 include("stiff_solvers.jl")
+using .StiffSolvers
+
 include("composite_solvers.jl")
+using .CompositeSolvers
+
 include("multiscale_solvers.jl")
+using .MultiscaleSolvers
+
 include("sparse_solvers.jl")
+using .SparseSolvers
+
 include("adaptive_solvers.jl")
+using .AdaptiveSolvers
+
 include("parallel_solvers.jl")
+using .ParallelSolvers
+
 include("specialty_solvers.jl")
+using .SpecialtySolvers
+
 include("algorithm_selector.jl")
+using .AlgorithmSelector
 
 # Re-export all public interfaces
 export AlgorithmRecommendation,

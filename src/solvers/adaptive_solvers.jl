@@ -2,9 +2,7 @@
 
 module AdaptiveSolvers
 
-using ..Core: SystemAnalysis
-using ..Solvers: AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize,
-                 is_applicable, compute_adjusted_priority, has_multiscale_behavior
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, ADAPTIVE
 using OrdinaryDiffEq
 using Sundials
 
@@ -29,10 +27,10 @@ end
 function build_adaptive_solver_catalogue()
     AlgorithmRecommendation[
         AlgorithmRecommendation(QNDF(), 8.5, ADAPTIVE;
-            description = "Quasi-Newton-based adaptive order solver (non-stiff or mildly stiff).",
+            description = "Quasi-Newton-based adaptive order solver (non-SL_STIFF or mildly SL_STIFF).",
             memory_efficiency = 0.7,
             stability_score = 0.8,
-            stiffness_range = (NON_STIFF, STIFF),
+            stiffness_range = (SL_NON_STIFF, SL_STIFF),
             supports_events = true,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
@@ -41,7 +39,7 @@ function build_adaptive_solver_catalogue()
             memory_efficiency = 0.9,
             computational_cost = 0.6,
             stability_score = 0.75,
-            stiffness_range = (NON_STIFF, MILDLY_STIFF),
+            stiffness_range = (SL_NON_STIFF, SL_MILDLY_STIFF),
             handles_mass_matrix = true,
             supports_events = true,
             references = ["https://computing.llnl.gov/projects/sundials"]),
@@ -51,7 +49,7 @@ function build_adaptive_solver_catalogue()
             memory_efficiency = 0.8,
             computational_cost = 0.7,
             stability_score = 0.95,
-            stiffness_range = (MILDLY_STIFF, EXTREMELY_STIFF),
+            stiffness_range = (SL_MILDLY_STIFF, SL_EXTREMELY_STIFF),
             handles_mass_matrix = true,
             supports_events = true,
             references = ["https://computing.llnl.gov/projects/sundials"]),
@@ -61,18 +59,10 @@ function build_adaptive_solver_catalogue()
             memory_efficiency = 0.85,
             computational_cost = 0.4,
             stability_score = 0.6,
-            stiffness_range = (NON_STIFF, MILDLY_STIFF),
+            stiffness_range = (SL_NON_STIFF, SL_MILDLY_STIFF),
             supports_events = true,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
-        AlgorithmRecommendation(CompositeAlgorithm(ROCK4(), AutoSwitch()), 9.2, ADAPTIVE;
-            description = "Composite scheme with adaptivity between explicit and semi-implicit steps.",
-            memory_efficiency = 0.7,
-            computational_cost = 0.6,
-            stability_score = 0.9,
-            stiffness_range = (NON_STIFF, VERY_STIFF),
-            supports_events = true,
-            references = ["https://github.com/SciML/OrdinaryDiffEq.jl"])
     ]
 end
 
@@ -105,3 +95,5 @@ end
 export AdaptiveSolverStrategy, get_adaptive_recommendations
 
 end # module
+
+

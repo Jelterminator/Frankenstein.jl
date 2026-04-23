@@ -1,4 +1,4 @@
-s# hybrid_backend.jl
+# hybrid_backend.jl
 """
     hybrid_backend.jl
     
@@ -43,16 +43,16 @@ function switch_backend(hybrid::HybridBackend, condition::Bool)
 end
 
 """
-    ADTypes.jacobian(hybrid::HybridBackend, f, x)
+    jacobian(hybrid::HybridBackend, f, x)
 
 Compute Jacobian using the current backend in the hybrid system.
 """
-function ADTypes.jacobian(hybrid::HybridBackend, f, x)
+function jacobian(hybrid::HybridBackend, f, x)
     try
-        return ADTypes.jacobian(hybrid.current_backend, f, x)
+        return jacobian(hybrid.current_backend, f, x)
     catch e
         @warn "Primary backend failed, switching to fallback: $e"
         switch_backend(hybrid, true)
-        return ADTypes.jacobian(hybrid.current_backend, f, x)
+        return jacobian(hybrid.current_backend, f, x)
     end
 end

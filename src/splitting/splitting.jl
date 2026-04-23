@@ -1,6 +1,6 @@
 module Splitting
 
-using ..Core
+using ..FCore
 export NoSplitting
 
 struct NoSplitting <: AbstractSplittingMethod end

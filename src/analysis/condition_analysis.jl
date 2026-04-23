@@ -1,13 +1,20 @@
-# condition_analysis.jl
+module Condition
+
+using LinearAlgebra
+using ...FCore: SystemAnalysis, StepInfo
+using ...Utilities.Jacobians: compute_jacobian
+
+export compute_condition_number, update_condition_number!
 
 function compute_condition_number(prob, u=prob.u0, t=prob.tspan[1]; J=nothing)
     if J === nothing
-        J = Utilities.Jacobians.compute_jacobian(prob.f, u, prob.p, t)
+        J = compute_jacobian(prob.f, u, prob.p, t)
     end
-    return cond(J)
+    # cond(J) only works for dense matrices. 
+    return cond(Array(J))
 end
 
-function update_condition_number!(sa::SystemAnalysis, step_info::Core.StepInfo)
+function update_condition_number!(sa::SystemAnalysis, step_info::StepInfo)
     # Approximate condition number change based on stiffness and du
     du = step_info.du
     norm_du = norm(du)
@@ -16,3 +23,5 @@ function update_condition_number!(sa::SystemAnalysis, step_info::Core.StepInfo)
     sa.condition_number = clamp(0.5 * (sa.condition_number + est_cond), 1.0, 1e10)
     return nothing
 end
+
+end # module Condition

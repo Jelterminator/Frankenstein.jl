@@ -1,13 +1,17 @@
-# composite_solvers.jl - IMEX and hybrid solver strategies for mixed stiff/non-stiff problems
+module CompositeSolvers
 
 using DifferentialEquations
 using OrdinaryDiffEq
 using Sundials
 using LinearSolve
 using SparseArrays
-using ..Core: SystemAnalysis, AbstractSolverStrategy
-using .base_types
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, COMPOSITE
 
+export CompositeSolverStrategy, get_composite_recommendations, is_mixed_stiffness_problem,
+       estimate_explicit_fraction, analyze_splitting_potential, configure_composite_solver,
+       recommend_composite_solver, suggest_problem_splitting
+
+# Implementation
 #==============================================================================#
 # Composite Solver Strategy Implementation
 #==============================================================================#
@@ -17,7 +21,7 @@ struct CompositeSolverStrategy <: AbstractSolverStrategy end
 """
     is_mixed_stiffness_problem(analysis::SystemAnalysis) -> Bool
 
-Determine if the problem has mixed stiff/non-stiff characteristics that would 
+Determine if the problem has mixed SL_STIFF/non-SL_STIFF characteristics that would 
 benefit from IMEX or hybrid methods.
 """
 function is_mixed_stiffness_problem(analysis::SystemAnalysis)
@@ -26,17 +30,17 @@ function is_mixed_stiffness_problem(analysis::SystemAnalysis)
     has_multiscale = has_multiscale_behavior(analysis)
     
     # Mixed problems typically have moderate stiffness ratios but clear timescale separation
-    if stiffness in [MILDLY_STIFF, STIFF] && has_multiscale
+    if stiffness in [SL_MILDLY_STIFF, SL_STIFF] && has_multiscale
         return true
     end
     
     # Check coupling strength - mixed problems often have weakly coupled components
-    if analysis.coupling_strength < 0.5 && stiffness != NON_STIFF
+    if analysis.coupling_strength < 0.5 && stiffness != SL_NON_STIFF
         return true
     end
     
     # Systems with sparse structure and moderate stiffness often benefit from splitting
-    if analysis.is_sparse && stiffness in [MILDLY_STIFF, STIFF]
+    if analysis.is_sparse && stiffness in [SL_MILDLY_STIFF, SL_STIFF]
         return true
     end
     
@@ -70,7 +74,7 @@ end
 
 Get algorithm recommendations for composite (IMEX/hybrid) methods.
 """
-function get_composite_recommendations(analysis::SystemAnalysis)
+function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6, prefer_memory::Bool=false, prefer_stability::Bool=true)
     stiffness = classify_stiffness(analysis)
     sys_size = classify_system_size(analysis)
     is_sparse = requires_sparse_handling(analysis)
@@ -82,43 +86,31 @@ function get_composite_recommendations(analysis::SystemAnalysis)
     # High-order IMEX methods for well-separated timescales
     if is_mixed && explicit_frac > 0.4
         
-        # ARK methods - Additive Runge-Kutta (IMEX)
-        if sys_size != LARGE_SYSTEM
+        # KenCarp methods - High-order ESDIRK for stiff/mixed problems
+        if sys_size != SS_LARGE_SYSTEM
             push!(recommendations, AlgorithmRecommendation(
-                ARK548L2SA2(), 9.2, COMPOSITE,
+                KenCarp4(), 9.2, COMPOSITE,
                 min_accuracy=1e-12,
                 max_accuracy=1e-4,
                 memory_efficiency=0.75,
                 computational_cost=0.6,
                 stability_score=0.9,
-                stiffness_range=(MILDLY_STIFF, STIFF),
-                system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-                description="5th order IMEX ARK method with excellent stability and efficiency for mixed problems",
-                references=["Kennedy & Carpenter (2019)"]
+                stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+                system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
+                description="4th order ESDIRK method, excellent for mixed stiff problems",
+                references=["Kennedy & Carpenter (2003)"]
             ))
             
             push!(recommendations, AlgorithmRecommendation(
-                ARK437L2SA1(), 8.9, COMPOSITE,
-                min_accuracy=1e-10,
-                max_accuracy=1e-3,
-                memory_efficiency=0.8,
-                computational_cost=0.55,
-                stability_score=0.85,
-                stiffness_range=(MILDLY_STIFF, STIFF),
-                system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-                description="4th order IMEX ARK method, robust for moderately stiff problems"
-            ))
-            
-            push!(recommendations, AlgorithmRecommendation(
-                ARK324L2SA2(), 8.5, COMPOSITE,
-                min_accuracy=1e-8,
-                max_accuracy=1e-2,
-                memory_efficiency=0.85,
-                computational_cost=0.45,
-                stability_score=0.8,
-                stiffness_range=(MILDLY_STIFF, STIFF),
-                system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
-                description="3rd order IMEX ARK method, good balance of accuracy and efficiency"
+                KenCarp5(), 8.9, COMPOSITE,
+                min_accuracy=1e-14,
+                max_accuracy=1e-5,
+                memory_efficiency=0.7,
+                computational_cost=0.7,
+                stability_score=0.95,
+                stiffness_range=(SL_STIFF, SL_VERY_STIFF),
+                system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
+                description="5th order ESDIRK method for high accuracy"
             ))
         end
         
@@ -130,8 +122,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.9,
             computational_cost=0.4,
             stability_score=0.75,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
             description="Crank-Nicolson Adams-Bashforth IMEX method, memory efficient"
         ))
         
@@ -142,8 +134,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.9,
             computational_cost=0.35,
             stability_score=0.7,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
             description="Crank-Nicolson Leapfrog IMEX method"
         ))
     end
@@ -158,8 +150,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.95,
             computational_cost=0.3,
             stability_score=0.7,
-            stiffness_range=(MILDLY_STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_VERY_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
             handles_sparse=true,
             description="First-order operator splitting, very memory efficient for sparse systems"
         ))
@@ -171,8 +163,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.8,
             computational_cost=0.5,
             stability_score=0.85,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
             description="3rd order ESDIRK method with IMEX capabilities"
         ))
         
@@ -183,14 +175,14 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.75,
             computational_cost=0.55,
             stability_score=0.9,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="4th order ESDIRK method, excellent for mixed stiff problems"
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
+            description="4th order ESDIRK method, excellent for mixed SL_STIFF problems"
         ))
     end
     
-    # Exponential integrators for linear stiff parts
-    if stiffness in [STIFF, VERY_STIFF] && sys_size != LARGE_SYSTEM && analysis.coupling_strength < 0.7
+    # Exponential integrators for linear SL_STIFF parts
+    if stiffness in [SL_STIFF, SL_VERY_STIFF] && sys_size != SS_LARGE_SYSTEM && analysis.coupling_strength < 0.7
         
         push!(recommendations, AlgorithmRecommendation(
             ETDRK4(), 8.6, COMPOSITE,
@@ -199,8 +191,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.7,
             computational_cost=0.7,
             stability_score=0.9,
-            stiffness_range=(STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
+            stiffness_range=(SL_STIFF, SL_VERY_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
             description="4th order exponential time differencing, excellent for semilinear problems",
             references=["Cox & Matthews (2002)"]
         ))
@@ -212,14 +204,14 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.75,
             computational_cost=0.65,
             stability_score=0.85,
-            stiffness_range=(STIFF, VERY_STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
+            stiffness_range=(SL_STIFF, SL_VERY_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
             description="3rd order exponential time differencing"
         ))
     end
     
     # Rosenbrock-W methods (linearly implicit IMEX-like behavior)
-    if stiffness in [MILDLY_STIFF, STIFF] && is_mixed
+    if stiffness in [SL_MILDLY_STIFF, SL_STIFF] && is_mixed
         
         push!(recommendations, AlgorithmRecommendation(
             RosenbrockW6S4OS(), 8.4, COMPOSITE,
@@ -228,8 +220,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.8,
             computational_cost=0.6,
             stability_score=0.85,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
             description="4th order Rosenbrock-W method with excellent stability"
         ))
         
@@ -240,14 +232,14 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.85,
             computational_cost=0.5,
             stability_score=0.9,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="5th order Rosenbrock method, excellent for mixed stiff/non-stiff problems"
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
+            description="5th order Rosenbrock method, excellent for mixed SL_STIFF/non-SL_STIFF problems"
         ))
     end
     
-    # Stabilized explicit methods for mildly stiff problems
-    if stiffness == MILDLY_STIFF && explicit_frac > 0.6
+    # Stabilized explicit methods for mildly SL_STIFF problems
+    if stiffness == SL_MILDLY_STIFF && explicit_frac > 0.6
         
         push!(recommendations, AlgorithmRecommendation(
             ROCK2(), 8.1, COMPOSITE,
@@ -256,9 +248,9 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.9,
             computational_cost=0.4,
             stability_score=0.8,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
-            description="Stabilized explicit method for mildly stiff problems"
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
+            description="Stabilized explicit method for mildly SL_STIFF problems"
         ))
         
         push!(recommendations, AlgorithmRecommendation(
@@ -268,14 +260,14 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.85,
             computational_cost=0.5,
             stability_score=0.85,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
             description="4th order stabilized explicit method"
         ))
     end
     
     # For large sparse systems with mixed character
-    if is_sparse && sys_size == LARGE_SYSTEM && is_mixed
+    if is_sparse && sys_size == SS_LARGE_SYSTEM && is_mixed
         
         push!(recommendations, AlgorithmRecommendation(
             TRBDF2(), 8.3, COMPOSITE,
@@ -284,8 +276,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.8,
             computational_cost=0.6,
             stability_score=0.8,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(MEDIUM_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM),
             handles_sparse=true,
             description="TR-BDF2 method, good for large sparse mixed problems"
         ))
@@ -298,8 +290,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.8,
             computational_cost=0.65,
             stability_score=0.9,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(MEDIUM_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM),
             handles_sparse=true,
             description="SUNDIALS ARKODE for large-scale IMEX problems",
             references=["Reynolds et al. (2018)"]
@@ -307,23 +299,12 @@ function get_composite_recommendations(analysis::SystemAnalysis)
     end
     
     # Multirate methods for problems with clear timescale separation
-    if has_multiscale_behavior(analysis) && sys_size != LARGE_SYSTEM
+    if has_multiscale_behavior(analysis) && sys_size != SS_LARGE_SYSTEM
         
-        push!(recommendations, AlgorithmRecommendation(
-            MRI_GARK4(), 8.0, COMPOSITE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.75,
-            computational_cost=0.6,
-            stability_score=0.8,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, MEDIUM_SYSTEM),
-            description="Multirate infinitesimal GARK method for multiscale problems"
-        ))
     end
     
     # Hybrid explicit-implicit methods
-    if explicit_frac > 0.5 && stiffness in [MILDLY_STIFF, STIFF]
+    if explicit_frac > 0.5 && stiffness in [SL_MILDLY_STIFF, SL_STIFF]
         
         push!(recommendations, AlgorithmRecommendation(
             SSPRK22(), 7.5, COMPOSITE,
@@ -332,8 +313,8 @@ function get_composite_recommendations(analysis::SystemAnalysis)
             memory_efficiency=0.95,
             computational_cost=0.3,
             stability_score=0.7,
-            stiffness_range=(MILDLY_STIFF, STIFF),
-            system_size_range=(SMALL_SYSTEM, LARGE_SYSTEM),
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
             description="Strong stability preserving method for mixed problems with dominant explicit part"
         ))
     end
@@ -440,9 +421,9 @@ end
 
 """
     recommend_composite_solver(analysis::SystemAnalysis;
-                              rtol::Float64=1e-6,
-                              prefer_memory::Bool=false,
-                              prefer_stability::Bool=false) -> Tuple{Any, Dict}
+                               rtol::Float64=1e-6,
+                               prefer_memory::Bool=false,
+                               prefer_stability::Bool=false) -> Tuple{Any, Dict}
 
 Get the single best composite solver recommendation with configuration.
 """
@@ -453,7 +434,7 @@ function recommend_composite_solver(analysis::SystemAnalysis;
     
     # Check if problem is suitable for composite methods
     if !is_mixed_stiffness_problem(analysis)
-        @info "Problem doesn't appear to have mixed stiff/non-stiff character. Consider explicit or stiff solvers instead."
+        @info "Problem doesn't appear to have mixed SL_STIFF/non-SL_STIFF character. Consider explicit or SL_STIFF solvers instead."
     end
     
     recommendations = get_composite_recommendations(analysis)
@@ -467,8 +448,8 @@ function recommend_composite_solver(analysis::SystemAnalysis;
     else
         # Compute adjusted priorities and sort
         priorities = [compute_adjusted_priority(rec, analysis;
-                                              prefer_memory=prefer_memory,
-                                              prefer_stability=prefer_stability)
+                                               prefer_memory=prefer_memory,
+                                               prefer_stability=prefer_stability)
                      for rec in applicable]
         
         best_idx = argmax(priorities)
@@ -510,6 +491,5 @@ function suggest_problem_splitting(analysis::SystemAnalysis)
     return suggestions
 end
 
-export CompositeSolverStrategy, get_composite_recommendations, is_mixed_stiffness_problem,
-       estimate_explicit_fraction, analyze_splitting_potential, configure_composite_solver,
-       recommend_composite_solver, suggest_problem_splitting
+end # module CompositeSolvers
+

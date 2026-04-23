@@ -1,6 +1,6 @@
 module Preconditioning
 
-using ..Core
+using ..FCore
 export DefaultPreconditioner
 
 struct DefaultPreconditioner <: AbstractPreconditioner end

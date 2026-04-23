@@ -2,9 +2,7 @@
 
 module SparseSolvers
 
-using ..Core: SystemAnalysis
-using ..Solvers: AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize,
-                 is_applicable, compute_adjusted_priority
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, SPARSE
 using OrdinaryDiffEq
 using Sundials
 using LinearSolve
@@ -29,15 +27,36 @@ end
 
 function build_sparse_solver_catalogue()
     AlgorithmRecommendation[
-        AlgorithmRecommendation(CVODE_BDF(linear_solver=:KLU), 9.0, SPARSE;
+        AlgorithmRecommendation(FBDF, 9.5, SPARSE;
+            description = "FBDF with sparse direct linear solver. Highly robust for large sparse systems.",
+            handles_sparse = true,
+            stability_score = 0.9,
+            computational_cost = 0.5),
+
+        AlgorithmRecommendation(QNDF, 9.3, SPARSE;
+            description = "QNDF with sparse direct solver. Good alternative to FBDF.",
+            handles_sparse = true,
+            stability_score = 0.85,
+            computational_cost = 0.5),
+
+        AlgorithmRecommendation(CVODE_BDF, 8.0, SPARSE;
             description = "SUNDIALS CVODE_BDF with KLU sparse direct solver.",
             handles_sparse = true,
             handles_mass_matrix = true,
+            is_sundials = true,
             stability_score = 0.95,
             computational_cost = 0.6,
             references = ["https://computing.llnl.gov/projects/sundials"]),
+
+        AlgorithmRecommendation(CVODE_BDF, 8.8, SPARSE;
+            description = "SUNDIALS CVODE_BDF with GMRES iterative solver. Good for large sparse systems where direct solvers are too costly.",
+            handles_sparse = true,
+            handles_mass_matrix = true,
+            is_sundials = true,
+            stability_score = 0.9,
+            computational_cost = 0.7),
         
-        AlgorithmRecommendation(TRBDF2(linsolve=KLUFactorization()), 8.5, SPARSE;
+        AlgorithmRecommendation(TRBDF2, 8.5, SPARSE;
             description = "TRBDF2 with sparse linear solver using KLUFactorization.",
             handles_sparse = true,
             stability_score = 0.9,
@@ -45,14 +64,14 @@ function build_sparse_solver_catalogue()
             computational_cost = 0.4,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
-        AlgorithmRecommendation(ROS34PW1(linsolve=KLUFactorization()), 7.5, SPARSE;
-            description = "ROS34PW1 Rosenbrock method with sparse KLU solver.",
+        AlgorithmRecommendation(Rosenbrock23, 7.5, SPARSE;
+            description = "Rosenbrock23 method with sparse KLU solver.",
             handles_sparse = true,
             stability_score = 0.85,
             computational_cost = 0.5,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
-        AlgorithmRecommendation(KenCarp4(linsolve=KLUFactorization()), 7.0, SPARSE;
+        AlgorithmRecommendation(KenCarp4, 7.0, SPARSE;
             description = "KenCarp4 IMEX scheme with sparse linear solver support.",
             handles_sparse = true,
             stability_score = 0.9,
@@ -60,6 +79,7 @@ function build_sparse_solver_catalogue()
             references = ["Kennedy & Carpenter (2003)"]),
     ]
 end
+
 
 #==============================================================================#
 # Recommendation Function
@@ -89,3 +109,5 @@ end
 export SparseSolverStrategy, get_sparse_recommendations
 
 end # module
+
+
