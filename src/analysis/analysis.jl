@@ -1,38 +1,27 @@
+# analysis.jl - Core system analysis functionality
+
 module Analysis
 
-using ..FCore: SystemAnalysis, StepInfo
-using ..Utilities.Jacobians
 using SciMLBase
-using SparseArrays, Symbolics, ForwardDiff, LinearAlgebra
+using LinearAlgebra
+using SparseArrays
+using Statistics
 
-# Include submodule files
+using ..FCore
+using ..Utilities.Jacobians
 include("sparsity_analysis.jl")
 using .Sparsity: detect_sparsity_patterns
 
-include("stiffness_analysis.jl")
-using .Stiffness: initial_stiffness_estimate, update_stiffness!
-
-include("timescale_analysis.jl")
-using .Timescales: compute_timescales, update_timescales!
-
-include("coupling_analysis.jl")
-using .Coupling: compute_coupling_strength, update_coupling_strength!
-
-include("condition_analysis.jl")
-using .Condition: compute_condition_number, update_condition_number!
-
-# Export functions
-export analyze_system_structure, detect_sparsity_patterns
-export initial_stiffness_estimate, update_stiffness!
-export compute_timescales, update_timescales!
-export compute_coupling_strength, update_coupling_strength!
-export compute_condition_number, update_condition_number!
-export needs_analysis_update!
+export analyze_system_structure, 
+       initial_stiffness_estimate,
+       initial_timescale_analysis,
+       estimate_coupling_strength,
+       analyze_sparsity,
+       check_stability_region,
+       needs_analysis_update!
 
 """
     analyze_system_structure(prob::SciMLBase.ODEProblem) -> SystemAnalysis
-
-Performs an initial comprehensive analysis of the ODE problem.
 """
 function analyze_system_structure(prob)
     u0 = prob.u0
@@ -40,12 +29,18 @@ function analyze_system_structure(prob)
     p = prob.p
     f = prob.f
 
-    # Compute system size and sparsity
+    # 1. Compute system size and detect sparsity patterns
     system_size = length(u0)
     sparsity = detect_sparsity_patterns(prob)
-    is_sparse = sparsity !== nothing && nnz(sparsity) / (system_size^2) < 0.1
-
-    # Compute Jacobian with fallback
+    
+    # 2. Natural, data-driven sparsity check (Threshold 35%)
+    density = (sparsity !== nothing) ? (nnz(sparsity) / (system_size^2)) : 1.0
+    is_sparse = (sparsity !== nothing) && (density < 0.35)
+    
+    @info "[Frankenstein Analysis] System Size: $system_size | Sparse: $is_sparse | Density: $(round(density*100, digits=2))%"
+    
+    # 3. Compute Jacobian with fallback
+    local J
     try
         J = compute_jacobian(f, u0, p, t0)
     catch e
@@ -54,68 +49,48 @@ function analyze_system_structure(prob)
     end
     J = is_sparse ? sparse(J) : J
 
-    # Perform analyses
+    # 4. Perform further analyses
     stiffness = initial_stiffness_estimate(f, u0, p, J0=J)
-    timescales = compute_timescales(prob, u0, t0, J=J)
-    coupling = compute_coupling_strength(prob, u0, t0, J=J)
-    condition = compute_condition_number(prob, u0, t0, J=J)
-
+    timescales = initial_timescale_analysis(J)
+    coupling = estimate_coupling_strength(J)
+    condition = cond(collect(J)) # Use dense for cond if small, or estimate
+    
     return SystemAnalysis{Float64}(
         stiffness, stiffness > 1e4, sparsity, timescales, coupling, condition, 
         system_size, is_sparse, J, 0, 0, 0, 0.0, 0, Any[]
     )
 end
 
-"""
-    needs_analysis_update!(sa::SystemAnalysis, step_info::StepInfo; ...)
+function initial_stiffness_estimate(f, u, p; J0=nothing)
+    # Spectral radius based estimate
+    evals = eigvals(collect(J0))
+    radius = maximum(abs.(evals))
+    return radius # Return raw spectral radius as a proxy for stiffness
+end
 
-Determines which analysis variables need updating based on dynamic indicators.
-"""
-function needs_analysis_update!(sa::SystemAnalysis, step_info::StepInfo; 
-        step_change_thresh=2.0, reject_thresh=0.2, norm_change_thresh=0.5, 
-        stable_steps=10, min_update_interval=5)
+function initial_timescale_analysis(J)
+    evals = eigvals(collect(J))
+    return abs.(1.0 ./ evals)
+end
+
+function estimate_coupling_strength(J)
+    # Using L1 norm of off-diagonal elements as a crude measure of coupling
+    n = size(J, 1)
+    if n <= 1; return 0.0; end
     
-    update_stiffness = false
-    update_timescales = false
-    update_coupling = false
-    update_condition = false
+    total = sum(abs.(J))
+    diag_total = sum(abs.(diag(J)))
+    return (total - diag_total) / (n*(n-1))
+end
 
-    sa.current_step += 1
-    current_step = sa.current_step
-    last_update_step = sa.last_update_step
+function check_stability_region(sol, stiffness)
+    # Dynamic check based on current dt and stiffness
+    return sol.dt * stiffness < 2.0
+end
 
-    # Skip updates if within minimum interval, unless forced by significant changes
-    if current_step - last_update_step < min_update_interval && sa.stable_count < stable_steps
-        return (stiffness=false, timescales=false, coupling=false, condition=false)
-    end
-
-    # Compute lightweight indicators
-    dt_ratio = step_info.dt_prev > 0 ? step_info.dt_prev / step_info.dt : 1.0
-    reject_rate = step_info.rejects / 10.0 # Heuristic
-    norm_du = norm(step_info.du)
-    
-    norm_change = sa.last_norm_du > 0 ? abs(norm_du / sa.last_norm_du - 1) : 0.0
-    sa.last_norm_du = norm_du
-
-    significant_change = dt_ratio > step_change_thresh || reject_rate > reject_thresh || norm_change > norm_change_thresh
-
-    if significant_change || sa.stable_count >= stable_steps
-        update_stiffness = dt_ratio > step_change_thresh || reject_rate > reject_thresh
-        update_timescales = norm_change > norm_change_thresh || dt_ratio > step_change_thresh
-        update_coupling = norm_change > norm_change_thresh || reject_rate > reject_thresh
-        update_condition = dt_ratio > step_change_thresh || reject_rate > reject_thresh
-
-        if significant_change
-            sa.stable_count = 0
-        end
-
-        if update_stiffness || update_timescales || update_coupling || update_condition
-            sa.last_update_step = current_step
-        end
-    end
-
-    return (stiffness=update_stiffness, timescales=update_timescales, 
-            coupling=update_coupling, condition=update_condition)
+function needs_analysis_update!(analysis, integrator)
+    # Heuristic for when to re-analyze
+    return integrator.nsteps - analysis.last_update_step > 50
 end
 
 end # module Analysis

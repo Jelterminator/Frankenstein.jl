@@ -11,11 +11,20 @@ Detects the sparsity pattern of the Jacobian.
 function detect_sparsity_patterns(prob::SciMLBase.ODEProblem)
     f = prob.f
 
-    # Method 1: Use jac_prototype if provided
-    # Note: we don't check has_jac(f) because jac_prototype can be provided 
-    # even without an analytical Jacobian function.
-    if hasproperty(f, :jac_prototype) && f.jac_prototype !== nothing
-        return f.jac_prototype isa SparseMatrixCSC ? copy(f.jac_prototype) : sparse(f.jac_prototype)
+    # Method 1: Robust property probe for jac_prototype or sparsity
+    proto = nothing
+    try
+        if hasproperty(f, :jac_prototype) && f.jac_prototype !== nothing
+            proto = f.jac_prototype
+        elseif hasproperty(f, :sparsity) && f.sparsity !== nothing
+            proto = f.sparsity
+        end
+    catch
+        # Fallback if property access is protected
+    end
+
+    if proto !== nothing
+        return proto isa SparseMatrixCSC ? copy(proto) : sparse(proto)
     end
 
 

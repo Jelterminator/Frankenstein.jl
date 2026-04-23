@@ -14,11 +14,38 @@ function initial_stiffness_estimate(f, u0, p; J0=nothing)
     if J0 === nothing
         J0 = compute_jacobian(f, u0, p, 0.0)
     end
-    # Simple spectral radius estimate
-    λ = eigvals(Array(J0))
-    stiffness_ratio = maximum(abs.(λ))
-    return stiffness_ratio
+    
+    n = size(J0, 1)
+    if n > 200
+        # Power iteration for spectral radius (stiffness)
+        v = rand(eltype(u0), n)
+        ρ = 0.0
+        try
+            for _ in 1:10
+                v = J0 * v
+                v_norm = norm(v)
+                if v_norm == 0 || isnan(v_norm)
+                    break
+                end
+                v /= v_norm
+            end
+            ρ = norm(J0 * v)
+        catch
+            ρ = 1e6 # Fallback to stiff
+        end
+        return isnan(ρ) ? 1e6 : ρ
+    else
+        # Spectral radius via eigenvalues
+        try
+            λ = eigvals(Array(J0))
+            stiffness = maximum(abs.(λ))
+            return isnan(stiffness) ? 1e6 : stiffness
+        catch
+            return 1e6 # Fallback if eigvals fails
+        end
+    end
 end
+
 
 """
     update_stiffness!(analysis::SystemAnalysis, step_info::StepInfo)

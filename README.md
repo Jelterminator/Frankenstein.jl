@@ -22,7 +22,7 @@ Are you tired of manually testing twenty different solvers for your ODE system? 
 using Frankenstein, DifferentialEquations
 
 prob = ODEProblem(f, u0, tspan)
-sol = solve(prob, Frankenstein()) # The Monster takes care of the rest
+sol = solve(prob, Monster()) # The Monster takes care of the rest
 ```
 
 ---

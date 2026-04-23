@@ -71,15 +71,16 @@ abstract type AbstractPerformanceMonitor end
     
 The Monster Solver Algorithm™ 🧟.
 """
-struct FrankensteinSolver <: AbstractMonsterSolver
+mutable struct FrankensteinSolver <: AbstractMonsterSolver
     configuration::Any # Will hold SolverConfiguration
     analysis::Any      # Will hold SystemAnalysis
     adaptation::Any    # Will hold AdaptationState
+    blacklisted_backends::Vector{String}
 end
 
 # Constructor
 function FrankensteinSolver(; kwargs...)
-    return FrankensteinSolver(nothing, nothing, nothing)
+    return FrankensteinSolver(nothing, nothing, nothing, String[])
 end
 
 # (solve dispatch moved to MonsterSolver.jl)
@@ -125,6 +126,7 @@ struct StepInfo{T, P}
     dt::T
     dt_prev::T
     rejects::Int
+    nsteps::Int
     t::T
     p::P
     prob::SciMLBase.ODEProblem

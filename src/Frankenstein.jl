@@ -23,4 +23,8 @@ using .Adaptation, .Preconditioning, .Splitting, .Monitoring, .Utilities
 
 export FrankensteinSolver, SolverConfiguration, Monster, solve, analyze_system
 
+# Convenience constructor to match the README
+# We use 'Monster' instead of 'Frankenstein' to avoid conflict with the module name.
+Monster() = FrankensteinSolver()
+
 end

@@ -29,7 +29,7 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     # Select technical backends (AD and Linear Solver)
     ad_available = get(frankenstein_kwargs, :ad_available, 
         [AutoForwardDiff(), AutoEnzyme(), AutoSparseForwardDiff(), AutoSymbolic(), AutoFiniteDiff()])
-    backend_selection = Backends.choose_backend(analysis, ad_available)
+    backend_selection = Backends.choose_backend(analysis, ad_available; is_external_solver=rec.is_sundials)
     
     cfg = create_solver_configuration(rec, analysis, backend_selection)
     
@@ -54,14 +54,36 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
         # Perform one or more steps
         try
             step!(integrator)
-        catch e
-            @error "[Frankenstein] Step failed with error: $e"
+        catch err
+            @error "[Frankenstein] Step failed with error: $err"
+            
+            # Check if this was a differentiation error (e.g. Enzyme crash)
+            if occursin("Differentiation", string(typeof(err))) || occursin("Autodiff", string(typeof(err)))
+                @warn "[Frankenstein] Differentiation failure detected. Blacklisting current backend and performing Surgery..."
+                
+                # Blacklist the failing backend name
+                current_backend_name = string(typeof(backend_selection.ad_backend))
+                push!(Fs.blacklisted_backends, current_backend_name)
+                
+                # Re-select backend
+                backend_selection = Backends.choose_backend(analysis, ad_available; 
+                    is_external_solver=rec.is_sundials,
+                    blacklist=Fs.blacklisted_backends)
+                cfg = create_solver_configuration(rec, analysis, backend_selection)
+                
+                @info "[Frankenstein] Surgery Successful! Pivoting to: $(typeof(cfg.algorithm))"
+                @info "[Frankenstein] New Backend: $(backend_selection.selection_rationale)"
+                
+                integrator = reinit_with_new_alg(integrator, cfg.algorithm, integrator.u, integrator.t)
+                continue
+            end
+
             if retry_count < max_retries
                 integrator = handle_instability!(integrator, retry_count)
                 retry_count += 1
                 continue
             else
-                rethrow(e)
+                rethrow(err)
             end
         end
         
@@ -78,7 +100,9 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
         end
 
         # 4. Periodic Analysis & Adaptation Update
-        rejects = hasproperty(integrator, :destats) ? integrator.destats.nreject : 0
+        stats = hasproperty(integrator, :stats) ? integrator.stats : (hasproperty(integrator, :destats) ? integrator.destats : nothing)
+        rejects = stats !== nothing && hasproperty(stats, :nreject) ? stats.nreject : 0
+        nsteps = stats !== nothing && hasproperty(stats, :naccept) ? stats.naccept : (stats !== nothing && hasproperty(stats, :nsteps) ? stats.nsteps : 0)
         
         du_buffer = similar(integrator.u)
         integrator.f(du_buffer, integrator.u, integrator.p, integrator.t)
@@ -93,20 +117,14 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
             curr_dt, 
             curr_dtcache,
             rejects,
+            nsteps,
             integrator.t,
             integrator.p,
             integrator.sol.prob
         )
         
-        updates = needs_analysis_update!(analysis, step_info)
-        
-        if any(updates)
-            # Perform deeper updates
-            if updates.stiffness
-                Analysis.Stiffness.update_stiffness!(analysis, step_info)
-            end
-            
-            # 5. Check for adaptation via Controller
+        if needs_analysis_update!(analysis, step_info)
+            # Perform adaptation check via Controller
             new_rec = adapt!(controller, analysis, step_info)
             
             if new_rec !== nothing && typeof(new_rec.algorithm) != typeof(cfg.algorithm)
