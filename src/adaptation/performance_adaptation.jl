@@ -4,7 +4,7 @@ module PerformanceAdaptation
 using OrdinaryDiffEq
 using ...FCore: SystemAnalysis, AbstractAdaptationStrategy, AlgorithmRecommendation, StepInfo
 using ...Monitoring: create_tiered_choice_function
-using ...Solvers: get_all_recommendations
+using ...Solvers: get_all_recommendations, select_algorithm
 
 export PerformanceAdaptationStrategy, adapt!, create_adaptive_composite
 
@@ -18,10 +18,11 @@ end
 
 
 
-"""
-    adapt!(strategy::PerformanceAdaptationStrategy, analysis::SystemAnalysis, step::StepInfo) -> AlgorithmRecommendation
-"""
 function adapt!(strategy::PerformanceAdaptationStrategy, analysis::SystemAnalysis, step::StepInfo)
+    # If the solver is cruising (no rejects, dt is large), look for performance gains
+    if step.rejects == 0 && step.dt > 1e-4
+        return select_algorithm(analysis; prefer_memory=false, prefer_stability=false)
+    end
     return nothing
 end
 

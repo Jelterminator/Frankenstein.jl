@@ -1,9 +1,17 @@
-# algorithm_selector.jl - Algorithm selection and configuration
+# algorithm_selector.jl - Trait-based algorithm selection and configuration
+"""
+    algorithm_selector.jl
+    
+Hardware-aware, trait-based algorithm configuration.
+"""
 
 module AlgorithmSelector
 
+using SciMLBase
 using ADTypes
-using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM
+using LinearSolve
+using SparseMatrixColorings
+using ..FCore
 
 using ..ExplicitSolvers: get_explicit_recommendations
 using ..StiffSolvers: get_stiff_recommendations
@@ -18,69 +26,64 @@ using ..SpecialtySolvers: get_specialty_recommendations
 # Unified Recommendation Interface
 #==============================================================================#
 
-"""
-    get_all_recommendations(analysis::SystemAnalysis; kwargs...)
-
-Gather recommendations from all solver strategy modules and return them
-sorted by adjusted priority (highest first).
-"""
 function get_all_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6,
-                                 prefer_memory::Bool=false,
-                                 prefer_stability::Bool=true)
-    # Collect from each strategy
+                                  prefer_memory::Bool=false,
+                                  prefer_stability::Bool=true)
+    # 1. Collect from all sub-modules with preference propagation
     recs = vcat(
-        get_explicit_recommendations(analysis; rtol=rtol,
-                                     prefer_memory=prefer_memory,
-                                     prefer_stability=prefer_stability),
-        get_stiff_recommendations(analysis; rtol=rtol,
-                                  prefer_memory=prefer_memory,
-                                  prefer_stability=prefer_stability),
-        get_composite_recommendations(analysis; rtol=rtol,
-                                      prefer_memory=prefer_memory,
-                                      prefer_stability=prefer_stability),
-        get_multiscale_recommendations(analysis; rtol=rtol,
-                                       prefer_memory=prefer_memory,
-                                       prefer_stability=prefer_stability),
-        get_sparse_recommendations(analysis; rtol=rtol,
-                                   prefer_memory=prefer_memory,
-                                   prefer_stability=prefer_stability),
-        get_adaptive_recommendations(analysis; rtol=rtol,
-                                     prefer_memory=prefer_memory,
-                                     prefer_stability=prefer_stability),
-        get_parallel_recommendations(analysis; rtol=rtol,
-                                     prefer_memory=prefer_memory,
-                                     prefer_stability=prefer_stability),
-        get_specialty_recommendations(analysis; rtol=rtol,
-                                      prefer_memory=prefer_memory,
-                                      prefer_stability=prefer_stability)
+        get_explicit_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_stiff_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_composite_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_multiscale_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_sparse_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_adaptive_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_parallel_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability),
+        get_specialty_recommendations(analysis; rtol=rtol, prefer_memory=prefer_memory, prefer_stability=prefer_stability)
     )
-    # sort by adjusted priority
-    return sort(recs; by = rec -> -compute_adjusted_priority(rec, analysis;
-                                  prefer_memory=prefer_memory,
-                                  prefer_stability=prefer_stability))
+
+    # 2. De-duplicate based on algorithm type
+    # We keep the one with the highest priority if duplicates exist
+    unique_recs = Dict{Any, AlgorithmRecommendation}()
+    for rec in recs
+        alg_key = typeof(rec.algorithm)
+        if !haskey(unique_recs, alg_key) || rec.priority > unique_recs[alg_key].priority
+            unique_recs[alg_key] = rec
+        end
+    end
+    
+    # 3. Final sorting
+    final_list = collect(values(unique_recs))
+    return sort(final_list; by = rec -> -compute_adjusted_priority(rec, analysis;
+                                   prefer_memory=prefer_memory,
+                                   prefer_stability=prefer_stability))
 end
 
-"""
-    select_algorithm(analysis::SystemAnalysis; kwargs...)
-
-Select the single best algorithm recommendation for the problem.
-Returns the top AlgorithmRecommendation.
-"""
 function select_algorithm(analysis::SystemAnalysis; kwargs...)
-    recs = get_all_recommendations(analysis; kwargs...)
+    # Get all candidate recommendations
+    recs = get_all_recommendations(analysis)
     return isempty(recs) ? nothing : first(recs)
 end
 
-
+#==============================================================================#
+# Hardware Awareness & Trait discovery
+#==============================================================================#
 
 """
-    create_solver_configuration(rec::AlgorithmRecommendation, analysis::SystemAnalysis, backend_selection; 
-                                 reltol::Float64=1e-6, abstol::Float64=1e-6, options...)
-
-Create a solver configuration by instantiating the recommended algorithm with the 
-optimally selected backends.
+    is_gpu(u) -> Bool
+Check if the state vector is on a GPU.
 """
-function create_solver_configuration(rec::AlgorithmRecommendation, analysis::SystemAnalysis, backend_selection;
+function is_gpu(u)
+    # Check for CuArray or similar GPU arrays without requiring the packages as dependencies
+    u_type = string(typeof(u))
+    return occursin("CuArray", u_type) || occursin("ROCArray", u_type) || occursin("GPUArray", u_type)
+end
+
+"""
+    create_solver_configuration(...)
+    
+Instantiates an algorithm with AD and Linear Solver using trait-based discovery.
+"""
+function create_solver_configuration(rec, analysis, backend_selection;
                                      reltol::Float64=1e-6,
                                      abstol::Float64=1e-6,
                                      options...)
@@ -88,64 +91,80 @@ function create_solver_configuration(rec::AlgorithmRecommendation, analysis::Sys
     alg_constructor = rec.algorithm
     ad_backend = backend_selection.ad_backend
     lin_solver = backend_selection.linear_solver
+    u0 = analysis.jacobian !== nothing ? zeros(eltype(analysis.jacobian), analysis.system_size) : zeros(analysis.system_size)
     
-    # 1. Refine AD backend based on algorithm compatibility
-    # 1. Refine AD backend based on algorithm compatibility
-    # Rosenbrock methods (like Rodas) currently have issues with explicit ADType objects 
-    # in some OrdinaryDiffEq versions, especially when sparsity is involved.
-    # Using the Boolean 'true' triggers the robust internal ForwardDiff path.
-
-    alg_name = string(alg_constructor)
-    use_bool_ad = false
-    if occursin("Rodas", alg_name) || occursin("Rosenbrock", alg_name)
-        use_bool_ad = true
+    # 1. Hardware Awareness Override
+    gpu_active = is_gpu(u0)
+    if gpu_active
+        @info "[Frankenstein] GPU detected! Optimizing configuration for device execution."
+        # Note: In a future update, we might swap out CPU-bound linear solvers here.
     end
 
-    # 2. Instantiate the algorithm with dynamic backend injection
-    instance = try
-        if rec.is_sundials
-            # Sundials uses linear_solver keyword
-            alg_constructor(linear_solver = lin_solver isa Symbol ? lin_solver : :GMRES)
-        else
-            # OrdinaryDiffEq uses linsolve and autodiff keywords
-            # Map AD backend to Bool if required
-            final_ad = use_bool_ad ? true : ad_backend
-            
-            if lin_solver !== nothing
-                try
-                    alg_constructor(linsolve = lin_solver, autodiff = final_ad)
-                catch
-                    try
-                        alg_constructor(linsolve = lin_solver)
-                    catch
-                        alg_constructor()
-                    end
-                end
-            else
-                try
-                    alg_constructor(autodiff = final_ad)
-                catch
-                    alg_constructor()
-                end
-            end
+    # 2. Determine constructor capabilities
+    # We use a robust property/method check instead of try-catch guessing
+    instance_temp = try alg_constructor() catch; nothing end
+    
+    # Discovery of keywords supported by the algorithm
+    supports_autodiff = false
+    supports_linsolve = false
+    
+    if instance_temp !== nothing
+        # Many SciML algorithms define these traits
+        supports_autodiff = hasproperty(instance_temp, :autodiff) || occursin("autodiff", string(methods(alg_constructor)))
+        supports_linsolve = hasproperty(instance_temp, :linsolve) || occursin("linsolve", string(methods(alg_constructor)))
+    end
+
+    # 3. Handle technical Workarounds
+    # Rodas/Rosenbrock methods often prefer Bool autodiff in certain SciML versions
+    final_ad = ad_backend
+    alg_name = string(alg_constructor)
+    if (occursin("Rodas", alg_name) || occursin("Rosenbrock", alg_name))
+        if ad_backend isa AutoForwardDiff
+            final_ad = true
+        elseif ad_backend isa AutoSymbolics
+            # Rosenbrock methods in OrdinaryDiffEq sometimes fail with NoFunctionWrapperFoundError
+            # when passed AutoSymbolics() directly. Mapping to true (ForwardDiff)
+            # avoids this while maintaining high performance. 
+            # Future note: Symbolic J compilation should be done at the ODEFunction level.
+            final_ad = true 
         end
-    catch e
-        @warn "Dynamic instantiation failed for $(alg_constructor), falling back to default instance. Error: $e"
-        alg_constructor() 
+    end
+
+    # 3. Sparse Coloring & Pattern Injection
+    final_ad = if ad_backend isa ADTypes.AutoSparse
+        # If it's a sparse backend, we ensure it has a coloring algorithm.
+        # Note: The actual sparsity pattern is injected at the ODEFunction level (jac_prototype)
+        # in MonsterSolver.jl, which SciML solvers use to configure the sparse AD.
+        if ad_backend.coloring_algorithm isa ADTypes.NoColoringAlgorithm && (analysis.is_sparse || analysis.sparsity_pattern !== nothing)
+            # Inject Greedy Coloring
+            @info "[Frankenstein] Injecting Greedy Coloring for sparse AD backend."
+            ADTypes.AutoSparse(ad_backend.dense_ad; 
+                               sparsity_detector = ad_backend.sparsity_detector,
+                               coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+        else
+            ad_backend
+        end
+    else
+        ad_backend
+    end
+
+    # 4. Cohesive unit instantiation
+    instance = if supports_autodiff && supports_linsolve
+        alg_constructor(autodiff = final_ad, linsolve = lin_solver)
+    elseif supports_autodiff
+        alg_constructor(autodiff = final_ad)
+    elseif supports_linsolve
+        alg_constructor(linsolve = lin_solver)
+    else
+        alg_constructor()
     end
     
     return (algorithm = instance,
-
-
-
             reltol = reltol,
             abstol = abstol,
             options = options)
 end
 
-
 export get_all_recommendations, select_algorithm, create_solver_configuration
 
 end # module AlgorithmSelector
-
-

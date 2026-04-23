@@ -19,11 +19,14 @@ export FrankensteinSolver,
 # Exported API
 export # Categories and Levels
        SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel,
+       EXPLICIT, STIFF, COMPOSITE, MULTISCALE, SPARSE, ADAPTIVE, PARALLEL, SPECIALTY,
        SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF,
        SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM,
        LOW_ACCURACY, STANDARD_ACCURACY, HIGH_ACCURACY,
        AlgorithmRecommendation,
-       compute_adjusted_priority
+       is_applicable, compute_adjusted_priority,
+       classify_stiffness, classify_system_size, classify_accuracy_level,
+       requires_sparse_handling, is_well_conditioned, has_multiscale_behavior
 
 #==============================================================================#
 # Abstract Types
@@ -74,13 +77,13 @@ The Monster Solver Algorithm™ 🧟.
 mutable struct FrankensteinSolver <: AbstractMonsterSolver
     configuration::Any # Will hold SolverConfiguration
     analysis::Any      # Will hold SystemAnalysis
-    adaptation::Any    # Will hold AdaptationState
-    blacklisted_backends::Vector{String}
+    adaptation::Any    # hold AdaptationState
+    disabled_backends::Dict{String, Int} # Backend Name => disabled until step N
 end
 
 # Constructor
 function FrankensteinSolver(; kwargs...)
-    return FrankensteinSolver(nothing, nothing, nothing, String[])
+    return FrankensteinSolver(nothing, nothing, nothing, Dict{String, Int}())
 end
 
 # (solve dispatch moved to MonsterSolver.jl)

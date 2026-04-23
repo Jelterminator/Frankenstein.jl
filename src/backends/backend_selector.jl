@@ -2,12 +2,14 @@
 """
     backend_selector.jl
     
-Intelligent backend selection based on problem characteristics.
+Intelligent backend selection using multiple dispatch and theoretical cost models.
 """
 
 using ADTypes
 using LinearAlgebra
 using SparseArrays
+using LinearSolve
+using SparseMatrixColorings
 
 """
     BackendSelection
@@ -25,14 +27,19 @@ end
 function choose_backend(analysis, 
                         available_backends;
                         is_external_solver::Bool=false,
-                        blacklist::Vector{String}=String[])
+                        disabled_backends::Dict{String, Int}=Dict{String, Int}())
     
-    # Filter out blacklisted backends
-    filtered_backends = filter(b -> !(string(typeof(b)) in blacklist), available_backends)
+    current_step = analysis.current_step
+    
+    # Filter out backends that are currently in their 1000-step cooling-off period
+    filtered_backends = filter(available_backends) do b
+        b_name = string(typeof(b))
+        disabled_until = get(disabled_backends, b_name, -1)
+        return current_step >= disabled_until
+    end
 
     best_backend  = nothing
     best_score    = -Inf
-    best_rationale = ""
 
     n       = analysis.system_size
     is_sp   = analysis.is_sparse
@@ -51,73 +58,123 @@ function choose_backend(analysis,
     if is_external_solver
         best_backend = AutoFiniteDiff()
         best_score = 0.0
-        best_rationale = "External Solver: Using built-in methods."
     else
-        # Diagnostic: List all scores
-        @info "[Frankenstein Selector] Evaluating scores for $n-var system (Sparse: $is_sp)"
         for backend in filtered_backends
             score = evaluate_backend_score(backend, n, sparsity, stiff, is_sp)
-            @info "  - $(typeof(backend)): Score = $score"
             if score > best_score
                 best_score     = score
                 best_backend   = backend
-                best_rationale = generate_rationale(backend, n, sparsity, stiff)
             end
         end
     end
 
+    if best_backend === nothing
+        # EMERGENCY FALLBACK: If everything is disabled, we return FiniteDiff
+        # unless filtered_backends was completely empty (unexpected)
+        best_backend = AutoFiniteDiff()
+        best_score = -999.0
+    end
+
+    best_rationale = generate_rationale(best_backend, n, sparsity, stiff)
     lin_solver = select_linear_solver_for_backend(best_backend, n, sparsity, stiff)
+    
     return BackendSelection(best_backend, lin_solver, best_score, best_rationale)
 end
 
-function evaluate_backend_score(backend::AbstractADType, problem_size::Int, 
-                                sparsity_ratio::Float64, is_stiff::Bool, is_sparse::Bool)
-    score = 0.0
-    b_str = string(typeof(backend))
-    
-    # NEW: Deconstructed string matching to handle wrapped types like AutoSparse{AutoForwardDiff}
-    if occursin("AutoSparse", b_str) && occursin("ForwardDiff", b_str)
-        if is_sparse
-            score += 500.0
-        else
-            score -= 200.0 
-        end
-    elseif occursin("AutoEnzyme", b_str)
-        score += (problem_size >= 250 ? 50.0 : 0.0)
-    elseif occursin("AutoForwardDiff", b_str)
-        score += (problem_size <= 150 ? 60.0 : 10.0)
-    elseif occursin("AutoSymbolics", b_str) || occursin("AutoSymbolic", b_str)
-        score += (problem_size <= 20 ? 100.0 : -50.0)
-    elseif occursin("AutoFiniteDiff", b_str)
-        score += 1.0 
-    end
-    
-    return score
+#==============================================================================#
+# Multiple Dispatch Cost Models
+#==============================================================================#
+
+# Generic fallback
+evaluate_backend_score(backend, n, sparsity, stiff, is_sp) = 1.0
+
+function evaluate_backend_score(backend::AutoForwardDiff, n, sparsity, stiff, is_sp)
+    # ForwardDiff complexity is O(N) dual numbers, or O(N^2) total cost for dense J
+    # We penalize as N grows large.
+    base_score = 100.0
+    scaling_penalty = (n / 100.0)^1.5 # Grows significantly after n=100
+    return base_score - scaling_penalty
 end
 
-function generate_rationale(backend::AbstractADType, n::Int, 
-                           sparsity::Float64, is_stiff::Bool)
-    b_str = string(typeof(backend))
-    if occursin("AutoForwardDiff", b_str) && !occursin("AutoSparse", b_str)
-        return "ForwardDiff: Optimal for small-medium systems (n=$n)."
-    elseif occursin("AutoEnzyme", b_str)
-        return "Enzyme: Selected for high-performance reverse-mode AD on large system (n=$n)."
-    elseif occursin("AutoSparse", b_str) && occursin("ForwardDiff", b_str)
-        return "Sparse ForwardDiff: leveraging sparsity pattern ($(round(sparsity*100, digits=1))% density) for performance."
-    elseif occursin("AutoSymbolics", b_str) || occursin("AutoSymbolic", b_str)
-        return "Symbolics: Using exact analytical derivatives for small-scale precision."
-    elseif occursin("AutoFiniteDiff", b_str)
-        return "FiniteDiff: Robust numerical differentiation for non-standard code."
+function evaluate_backend_score(backend::AutoEnzyme, n, sparsity, stiff, is_sp)
+    # Enzyme (Reverse Mode) has constant factor overhead but scales O(1) in dual-like passes
+    # It wins for large dense systems.
+    base_score = 50.0
+    scale_bonus = (n / 300.0) * 20.0 # Becomes attractive as n increases
+    return base_score + scale_bonus
+end
+
+# Internal helper to handle the wrapped ADTypes.AutoSparse
+function evaluate_backend_score(backend::AutoSparse, n, sparsity, stiff, is_sp)
+    # Sparse AD is the king of PDEs. 
+    if !is_sp
+        return -500.0 # Heavy penalty for using sparse on dense
+    end
+    
+    # Base score is extremely high to prioritize sparsity
+    base_score = 500.0
+    
+    # We add a bonus if the coloring algorithm is high-quality (like GreedyColoring)
+    coloring_bonus = 0.0
+    if hasproperty(backend, :coloring_algorithm) && backend.coloring_algorithm !== nothing
+        coloring_bonus = 50.0
+    end
+    
+    return base_score + coloring_bonus
+end
+
+function evaluate_backend_score(backend::AutoSymbolics, n, sparsity, stiff, is_sp)
+    # Symbolic is perfect but doesn't scale.
+    # Symbolic is perfect but doesn't scale well beyond moderate sizes.
+    if n > 120
+        return -100.0
     else
-        return "AD Backend: $(typeof(backend))"
+        return 110.0 # Prioritize symbolic for small-medium systems
+    end
+end
+
+function evaluate_backend_score(backend::AutoFiniteDiff, n, sparsity, stiff, is_sp)
+    # FiniteDiff is the baseline. 
+    return 10.0
+end
+
+#==============================================================================#
+# Decision Rationale & Linear Solver Selection
+#==============================================================================#
+
+function generate_rationale(backend, n, sparsity, stiff)
+    if backend === nothing
+        return "None: No suitable AD backend available."
+    elseif backend isa AutoForwardDiff && !(backend isa AutoSparse)
+        return "ForwardDiff: Optimal dual-number performance for small-medium systems (n=$n)."
+    elseif backend isa AutoEnzyme
+        return "Enzyme: High-performance reverse-mode scaling for large dense systems (n=$n)."
+    elseif backend isa AutoSparse
+        return "Sparse AD: Exploiting $(round(sparsity*100, digits=2))% density for PDE-optimal scaling."
+    elseif backend isa AutoSymbolics
+        return "Symbolics: Exact analytical precision for small-kernel system."
+    else
+        return "Backend: $(typeof(backend))"
     end
 end
 
 function select_linear_solver_for_backend(ad_backend, n, sparsity, stiff)
-    # Basic logic for linear solver selection
+    # Joint (AD + Linear) Selection
+    if ad_backend isa AutoSparse
+        if n > 5000
+            # For massive systems, we move to iterative solvers
+            return KrylovJL_GMRES()
+        elseif n > 500
+            return KLUFactorization()
+        else
+            return UMFPACKFactorization()
+        end
+    end
+    
+    # Dense fallbacks
     if n > 500
-        return nothing # Let the solver pick UMFPACK/KLU automatically or use SciML default
+        return LUFactorization()
     else
-        return nothing
+        return nothing # Default SciML (typically LU/QR)
     end
 end

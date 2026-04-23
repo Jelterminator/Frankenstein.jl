@@ -228,7 +228,8 @@ function get_explicit_recommendations(analysis::SystemAnalysis;
     # Adjust priorities based on strategy and problem characteristics
     adjusted = map(applicable) do rec
         priority = compute_adjusted_priority(rec, analysis; 
-                                           prefer_memory=strategy.prefer_memory_efficient)
+                                           prefer_memory=prefer_memory,
+                                           prefer_stability=prefer_stability)
         
         # Strategy-specific adjustments
         if strategy.prefer_high_order && occursin("order", rec.description)

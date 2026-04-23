@@ -234,7 +234,27 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
         ))
     end
     
-    return recommendations
+    applicable = filter(rec -> is_applicable(rec, analysis, rtol), recommendations)
+
+    # Adjust priorities based on preferences
+    adjusted = map(applicable) do rec
+        priority = compute_adjusted_priority(rec, analysis; 
+                                           prefer_memory=prefer_memory,
+                                           prefer_stability=prefer_stability)
+        
+        # Maintain original metadata but update priority
+        AlgorithmRecommendation(
+            rec.algorithm, priority, rec.category;
+            min_accuracy=rec.min_accuracy, max_accuracy=rec.max_accuracy,
+            memory_efficiency=rec.memory_efficiency, computational_cost=rec.computational_cost,
+            stability_score=rec.stability_score, stiffness_range=rec.stiffness_range,
+            system_size_range=rec.system_size_range, handles_sparse=rec.handles_sparse,
+            handles_mass_matrix=rec.handles_mass_matrix, supports_events=rec.supports_events,
+            is_sundials=rec.is_sundials, description=rec.description, references=rec.references
+        )
+    end
+
+    return sort(adjusted; by = x -> -x.priority)
 end
 
 """

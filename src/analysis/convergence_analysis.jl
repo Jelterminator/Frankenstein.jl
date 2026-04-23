@@ -1,7 +1,7 @@
 module Convergence
 
 using LinearAlgebra
-using ..FCore: SystemAnalysis, StepInfo
+using ...FCore: SystemAnalysis, StepInfo
 
 export compute_convergence_rates, update_convergence_logic!
 

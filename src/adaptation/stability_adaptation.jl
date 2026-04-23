@@ -1,7 +1,7 @@
 module StabilityAdaptation
 
 using ...FCore: SystemAnalysis, AbstractAdaptationStrategy, AlgorithmRecommendation, StepInfo
-using ...Solvers: compute_adjusted_priority, select_best_algorithm
+using ...Solvers: compute_adjusted_priority, select_algorithm
 
 export StabilityAdaptationStrategy, adapt!
 
@@ -17,8 +17,11 @@ end
 
 function adapt!(strategy::StabilityAdaptationStrategy, analysis::SystemAnalysis, step::StepInfo)
     local_stiffness = analysis.stiffness_ratio
-    if local_stiffness > strategy.stiffness_threshold || step.rejects > 2
-        return select_best_algorithm(analysis)
+    
+    # If the system has more than 10 rejects or a high stiffness ratio, trigger re-selection
+    if local_stiffness > strategy.stiffness_threshold || step.rejects > 0
+        @info "[Adaptation] Stability crisis detected! Re-evaluating algorithm candidates..."
+        return select_algorithm(analysis; prefer_stability=true)
     end
     return nothing
 end

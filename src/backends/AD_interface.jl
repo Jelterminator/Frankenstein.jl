@@ -101,7 +101,7 @@ function is_backend_suitable(backend::AbstractADType, problem_size::Int, sparsit
     end
     
     # Symbolic for small analytical problems
-    if backend isa AutoSymbolic
+    if backend isa AutoSymbolics
         return problem_size <= 20
     end
     

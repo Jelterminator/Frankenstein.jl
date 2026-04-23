@@ -7,13 +7,8 @@ Symbolic differentiation backend using Symbolics.jl.
 
 using Symbolics
 using ADTypes
+using SciMLBase
 
-"""
-    AutoSymbolic <: AbstractADType
-
-Symbolic automatic differentiation backend using Symbolics.jl.
-"""
-struct AutoSymbolic <: AbstractADType end
 
 """
     configure_symbolic()
@@ -21,7 +16,7 @@ struct AutoSymbolic <: AbstractADType end
 Configure symbolic differentiation backend.
 """
 function configure_symbolic()
-    return AutoSymbolic()
+    return AutoSymbolics()
 end
 
 """
@@ -29,13 +24,27 @@ end
 
 Compute Jacobian using symbolic differentiation.
 """
-function jacobian(::AutoSymbolic, f, x)
-    # Create symbolic variables
+function jacobian(::AutoSymbolics, f, x)
+    # 0. Robust unwrapping for SciML functions to bypass FunctionWrappers
+    # Symbolics cannot trace through a FunctionWrapper limited to Float64.
+    raw_f = if f isa SciMLBase.ODEFunction
+        f.f
+    else
+        f
+    end
+
+    # 1. Create symbolic variables
     n = length(x)
     vars = Symbolics.@variables $(Symbol.("x", 1:n))[1:n]
     
-    # Convert function to symbolic
-    symbolic_f = f(vars)
+    # 2. Handle in-place vs out-of-place for tracing
+    symbolic_f = if SciMLBase.isinplace(f)
+        du = similar(vars, Num)
+        raw_f(du, vars, nothing, 0.0) # Assume p=nothing, t=0.0 for tracing
+        du
+    else
+        raw_f(vars, nothing, 0.0)
+    end
     
     # Compute symbolic Jacobian
     J_symbolic = Symbolics.jacobian(symbolic_f, vars)

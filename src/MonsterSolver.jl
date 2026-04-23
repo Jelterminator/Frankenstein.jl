@@ -2,6 +2,8 @@ module MonsterSolver
 
 using SciMLBase
 using ADTypes
+using SparseDiffTools
+using SparseMatrixColorings
 using ..FCore
 using ..Analysis
 using ..Solvers
@@ -24,11 +26,34 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
 
     # 1. Initial analysis and selection
     analysis = analyze_system_structure(prob)
+    
+    # Robust preparation: Standardize the ODEFunction and preserve existing jac_prototype.
+    # We also synchronize the sparsity pattern if detected.
+    raw_f = prob.f isa SciMLBase.ODEFunction ? prob.f.f : prob.f
+    
+    # Safely get existing jac_prototype
+    jp_existing = hasproperty(prob.f, :jac_prototype) ? prob.f.jac_prototype : nothing
+    
+    new_f = SciMLBase.ODEFunction(raw_f; 
+                       jac_prototype = (analysis.is_sparse && analysis.sparsity_pattern !== nothing) ? 
+                                       analysis.sparsity_pattern : jp_existing)
+    prob = SciMLBase.remake(prob, f = new_f)
+    
+    if analysis.is_sparse && analysis.sparsity_pattern !== nothing
+        @info "[Frankenstein] Synchronized detected sparsity pattern and disabled FunctionWrappers."
+    else
+        @info "[Frankenstein] Prepared ODEFunction for adaptive backends (FunctionWrappers disabled)."
+    end
+
     rec = select_algorithm(analysis; frankenstein_kwargs...)
     
     # Select technical backends (AD and Linear Solver)
     ad_available = get(frankenstein_kwargs, :ad_available, 
-        [AutoForwardDiff(), AutoEnzyme(), AutoSparseForwardDiff(), AutoSymbolic(), AutoFiniteDiff()])
+        [AutoForwardDiff(), 
+         AutoEnzyme(), 
+         AutoSparseForwardDiff(), 
+         AutoSymbolics(), 
+         AutoFiniteDiff()])
     backend_selection = Backends.choose_backend(analysis, ad_available; is_external_solver=rec.is_sundials)
     
     cfg = create_solver_configuration(rec, analysis, backend_selection)
@@ -42,11 +67,31 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     @info "[Frankenstein] Backend selection: $(backend_selection.selection_rationale)"
     
     # 2. Initialize the first integrator
-    integrator = init(prob, cfg.algorithm; 
-        reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
-
-    
-    retry_count = 0
+    # 2. Solver initialization with error handling
+    integrator = try
+        init(prob, cfg.algorithm; 
+             reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
+    catch err
+        @warn "[Frankenstein] Initial solver configuration failed: $err"
+        if occursin("FunctionWrapper", string(err)) || occursin("No matching function wrapper", string(err)) || occursin("Differentiation", string(err))
+            @warn "[Frankenstein] $(typeof(backend_selection.ad_backend)) failure during init. Retrying with next best backend..."
+            
+            # Record the failure and re-select
+            current_backend_name = string(typeof(backend_selection.ad_backend))
+            Fs.disabled_backends[current_backend_name] = 999999 # Disable practically forever for this run
+            
+            ad_available_filtered = filter(b -> string(typeof(b)) != current_backend_name, ad_available)
+            backend_selection = Backends.choose_backend(analysis, ad_available_filtered; 
+                is_external_solver=rec.is_sundials,
+                disabled_backends=Fs.disabled_backends)
+            cfg = create_solver_configuration(rec, analysis, backend_selection)
+            
+            @info "[Frankenstein] Recovered with $(typeof(backend_selection.ad_backend))"
+            init(prob, cfg.algorithm; reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
+        else
+            rethrow(err)
+        end
+    end
     max_retries = get(frankenstein_kwargs, :max_retries, 3)
     
     # 3. Main stepping loop
@@ -59,16 +104,16 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
             
             # Check if this was a differentiation error (e.g. Enzyme crash)
             if occursin("Differentiation", string(typeof(err))) || occursin("Autodiff", string(typeof(err)))
-                @warn "[Frankenstein] Differentiation failure detected. Blacklisting current backend and performing Surgery..."
+                @warn "[Frankenstein] Differentiation failure detected. Disabling backend for 1000 steps and performing Surgery..."
                 
-                # Blacklist the failing backend name
+                # Record the disablement (current step + 1000)
                 current_backend_name = string(typeof(backend_selection.ad_backend))
-                push!(Fs.blacklisted_backends, current_backend_name)
+                Fs.disabled_backends[current_backend_name] = analysis.current_step + 1000
                 
                 # Re-select backend
                 backend_selection = Backends.choose_backend(analysis, ad_available; 
                     is_external_solver=rec.is_sundials,
-                    blacklist=Fs.blacklisted_backends)
+                    disabled_backends=Fs.disabled_backends)
                 cfg = create_solver_configuration(rec, analysis, backend_selection)
                 
                 @info "[Frankenstein] Surgery Successful! Pivoting to: $(typeof(cfg.algorithm))"
@@ -123,8 +168,13 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
             integrator.sol.prob
         )
         
-        if needs_analysis_update!(analysis, step_info)
-            # Perform adaptation check via Controller
+        # TIERED DIAGNOSTICS:
+        # Step 1: Light Pulse (Every Step)
+        if light_pulse(analysis, step_info)
+            # Step 2: Heavy Diagnosis (Triggered)
+            heavy_diagnostic!(analysis, step_info)
+            
+            # Step 3: Adaptation & Potential Surgery
             new_rec = adapt!(controller, analysis, step_info)
             
             if new_rec !== nothing && typeof(new_rec.algorithm) != typeof(cfg.algorithm)

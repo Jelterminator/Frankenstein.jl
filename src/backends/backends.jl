@@ -27,7 +27,6 @@ export configure_sparse_forwarddiff, configure_enzyme, configure_finite_diff, co
 
 export switch_backend, choose_backend
 export BackendPerformanceMetrics, evaluate_backend_performance
-export AutoSymbolic
 
 
 #==============================================================================#
