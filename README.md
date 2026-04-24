@@ -89,12 +89,16 @@ sol = solve(prob, Frankenstein(), callback=cb)
 
 ## 🏗 Roadmap & Status
 
-| Phase | Milestone | Status |
-| :--- | :--- | :--- |
-| **1** | Core Solver Interface & Routing | ✅ Complete |
-| **2** | Stiffness & Sparsity Analysis | ✅ Complete |
-| **3** | Stiff/Non-Stiff Library Integration | ✅ Extensive |
-| **4** | Hybrid Dynamic Adaptation | 🚧 In Progress |
+While the "Brain" of the Monster is highly capable of analyzing problem structures, the current focus is on stabilizing deep SciML backend integration and bringing dormant modules to life.
+
+| Phase | Milestone | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **1** | Core Solver Interface & Routing | ✅ Complete | The `Monster()` wrapper is fully integrated with `SciMLBase` and standard ODE definitions. |
+| **2** | Structural System Analysis | ✅ Complete | A-priori detection of stiffness, sparsity density, and coupling architectures. |
+| **3** | Dynamic Backend Hot-Swapping | 🚧 In Progress | The "Surgery" fallback system is active, but currently battling upstream SciML cache dimension errors and `FunctionWrapper` strictness. |
+| **4** | Hybrid Dynamic Adaptation | 🚧 In Progress | Real-time transitions between stiff and non-stiff methods are wired up but require further stabilization. |
+| **5** | Preconditioning Pipeline | 🔴 Planned | The `src/preconditioning/` folder currently lies dormant. Implementing ILU and AMG preconditioners is required before large-scale GMRES/Krylov performance can be fully unlocked. |
+| **6** | Operator Splitting & Multiscale | 🔴 Planned | The `src/splitting/` folder is currently just a stub. Future support planned for multiscale PDE problems (e.g., separating stiff chemistry from non-stiff advection). |
 
 ---
 

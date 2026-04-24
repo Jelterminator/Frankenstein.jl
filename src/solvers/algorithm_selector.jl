@@ -12,7 +12,6 @@ using ADTypes
 using LinearSolve
 using SparseMatrixColorings
 using ..FCore
-using ..Backends: PrecomputedSparsityDetector
 
 using ..ExplicitSolvers: get_explicit_recommendations
 using ..StiffSolvers: get_stiff_recommendations
@@ -136,15 +135,10 @@ function create_solver_configuration(rec, analysis, backend_selection;
         # If it's a sparse backend, we ensure it has a coloring algorithm and 
         # is synchronized with our detected pattern.
         if (analysis.is_sparse || analysis.sparsity_pattern !== nothing)
-            @info "[Frankenstein] Injecting Precomputed Sparsity and Greedy Coloring for sparse AD."
-            
-            # Use our custom detector to force the AD to use the SAME pattern
-            detector = analysis.sparsity_pattern !== nothing ? 
-                      PrecomputedSparsityDetector(analysis.sparsity_pattern) : 
-                      ad_backend.sparsity_detector
+            @info "[Frankenstein] Injecting Symbolics Sparsity and Greedy Coloring for sparse AD."
             
             ADTypes.AutoSparse(ad_backend.dense_ad; 
-                               sparsity_detector = detector,
+                               sparsity_detector = ADTypes.SymbolicsSparsityDetector(),
                                coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
         else
             ad_backend

@@ -6,35 +6,12 @@ Common interface for all automatic differentiation backends.
 """
 
 using ADTypes
+import ADTypes: jacobian_sparsity, AbstractADType, NoSparsityDetector, NoColoringAlgorithm
 using LinearAlgebra
 using SparseArrays
 using ForwardDiff
 using FiniteDiff
 using SparseDiffTools
-
-# Define the missing types if they are not in ADTypes
-# In Frankenstein, we often use these aliases.
-if !isdefined(@__MODULE__, :AutoSparseForwardDiff)
-    const AutoSparseForwardDiff = AutoSparse{<:AutoForwardDiff}
-end
-
-if !isdefined(@__MODULE__, :AutoSymbolics)
-    const AutoSymbolics = AutoSymbolic
-end
-
-"""
-    PrecomputedSparsityDetector
-    
-A detector that returns a pre-computed sparsity pattern. Used to ensure
-consistency between analysis and AD backends.
-"""
-struct PrecomputedSparsityDetector <: ADTypes.AbstractSparsityDetector
-    pattern::SparseMatrixCSC
-end
-
-function ADTypes.jacobian_sparsity(f::Any, x::Any, detector::PrecomputedSparsityDetector)
-    return detector.pattern
-end
 
 """
     jacobian(backend, f, x)
@@ -64,7 +41,7 @@ function jacobian(backend::AutoSparse, f, x)
         if backend.sparsity_detector isa AbstractMatrix
             backend.sparsity_detector
         else
-            ADTypes.jacobian_sparsity(f, x, backend.sparsity_detector)
+            jacobian_sparsity(f, x, backend.sparsity_detector)
         end
     else
         # Fallback to structural detection

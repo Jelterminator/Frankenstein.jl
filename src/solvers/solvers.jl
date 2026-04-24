@@ -17,7 +17,7 @@ using Sundials
 using LinearSolve
 using SparseArrays
 using ..FCore: FCore, SystemAnalysis, AbstractSolverStrategy
-using ..Backends: Backends, PrecomputedSparsityDetector
+using ..Backends: Backends
 
 # Re-export enums from FCore
 using ..FCore: SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel,

@@ -21,7 +21,7 @@ include("hybrid_backend.jl")
 include("backend_selector.jl")
 
 # Export key functions
-export jacobian, select_ad_backend, select_linear_solver, PrecomputedSparsityDetector
+export jacobian, select_ad_backend, select_linear_solver
 export configure_preconditioner
 export configure_sparse_forwarddiff, configure_enzyme, configure_finite_diff, configure_symbolic
 
