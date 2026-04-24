@@ -1,6 +1,5 @@
 # Jupyter Notebooks
 .ipynb_checkpoints/
-*.ipynb
 
 # Julia
 # (Keeping Manifest.toml is often preferred for applications, but we can add common patterns)

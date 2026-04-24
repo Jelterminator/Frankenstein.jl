@@ -55,11 +55,6 @@ function analyze_system_structure(prob::ODEProblem)
     # IMPROVED: Use the user's prototype if it exists, otherwise use what we derived
     sparsity_pattern = proto !== nothing ? proto : (is_sparse ? sparse(J) : nothing)
     
-    # Ensure the pattern is canonical if it's sparse
-    if sparsity_pattern isa SparseMatrixCSC
-        dropzeros!(sparsity_pattern)
-    end
-
     # 4. Perform further analyses
     stiffness = initial_stiffness_estimate(f, u0, p, J0=J)
     timescales = initial_timescale_analysis(J)

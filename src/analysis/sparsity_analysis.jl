@@ -43,9 +43,15 @@ function detect_sparsity_patterns(prob::SciMLBase.ODEProblem)
         end
     end
 
-    # Method 3: Structural and Numerical detection for small systems
+    # Method 3: Structural and Numerical detection for small/medium systems
     if n < 1000
         try
+            # SAFETY: For very small systems (N < 50), dense is almost always faster
+            # and much more robust against DimensionMismatch in AD backends.
+            if n < 50
+                return (false, 1.0, nothing)
+            end
+
             u0 = prob.u0
             p = prob.p
             t_sample = prob.tspan[1]
@@ -73,7 +79,9 @@ function detect_sparsity_patterns(prob::SciMLBase.ODEProblem)
             end
             
             density = nnz(pattern) / (n^2)
-            return (density < 0.35, density, pattern)
+            # Re-verify the is_sparse criterion with the size threshold
+            is_sparse_result = (density < 0.35)
+            return (is_sparse_result, density, pattern)
         catch e
             @warn "Sparsity detection failed in Method 3: $e"
         end

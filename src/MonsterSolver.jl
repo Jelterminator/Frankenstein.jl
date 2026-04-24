@@ -31,12 +31,19 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     # We also synchronize the sparsity pattern if detected.
     raw_f = prob.f isa SciMLBase.ODEFunction ? prob.f.f : prob.f
     
-    # Safely get existing jac_prototype
+    # Safely get existing sparsity metadata
     jp_existing = hasproperty(prob.f, :jac_prototype) ? prob.f.jac_prototype : nothing
+    colorvec_existing = hasproperty(prob.f, :colorvec) ? prob.f.colorvec : nothing
+    sparsity_existing = hasproperty(prob.f, :sparsity) ? prob.f.sparsity : nothing
     
     new_f = SciMLBase.ODEFunction(raw_f; 
                        jac_prototype = (analysis.is_sparse && analysis.sparsity_pattern !== nothing) ? 
-                                       analysis.sparsity_pattern : jp_existing)
+                                       analysis.sparsity_pattern : jp_existing,
+                       colorvec = colorvec_existing,
+                       sparsity = (analysis.is_sparse && analysis.sparsity_pattern !== nothing) ? 
+                                  analysis.sparsity_pattern : sparsity_existing)
+
+
     prob = SciMLBase.remake(prob, f = new_f)
     
     if analysis.is_sparse && analysis.sparsity_pattern !== nothing

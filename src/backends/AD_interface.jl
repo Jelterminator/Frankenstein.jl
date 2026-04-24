@@ -8,6 +8,33 @@ Common interface for all automatic differentiation backends.
 using ADTypes
 using LinearAlgebra
 using SparseArrays
+using ForwardDiff
+using FiniteDiff
+using SparseDiffTools
+
+# Define the missing types if they are not in ADTypes
+# In Frankenstein, we often use these aliases.
+if !isdefined(@__MODULE__, :AutoSparseForwardDiff)
+    const AutoSparseForwardDiff = AutoSparse{<:AutoForwardDiff}
+end
+
+if !isdefined(@__MODULE__, :AutoSymbolics)
+    const AutoSymbolics = AutoSymbolic
+end
+
+"""
+    PrecomputedSparsityDetector
+    
+A detector that returns a pre-computed sparsity pattern. Used to ensure
+consistency between analysis and AD backends.
+"""
+struct PrecomputedSparsityDetector <: ADTypes.AbstractSparsityDetector
+    pattern::SparseMatrixCSC
+end
+
+function ADTypes.jacobian_sparsity(f::Any, x::Any, detector::PrecomputedSparsityDetector)
+    return detector.pattern
+end
 
 """
     jacobian(backend, f, x)
@@ -24,6 +51,43 @@ end
 
 function jacobian(::AutoFiniteDiff, f, x)
     return FiniteDiff.finite_difference_jacobian(f, x)
+end
+
+function jacobian(backend::AutoSparse, f, x)
+    # Generic sparse Jacobian computation using SparseDiffTools
+    # This is useful for benchmarking and small-scale testing
+    n = length(x)
+    
+    # Get or detect sparsity
+    sparsity = if hasproperty(backend, :sparsity_detector) && !(backend.sparsity_detector isa NoSparsityDetector)
+        # Use provided pattern if it's already a matrix
+        if backend.sparsity_detector isa AbstractMatrix
+            backend.sparsity_detector
+        else
+            ADTypes.jacobian_sparsity(f, x, backend.sparsity_detector)
+        end
+    else
+        # Fallback to structural detection
+        try
+            SparseDiffTools.jacobian_sparsity(f, x)
+        catch
+            # Last resort: numerical
+            sparse(ForwardDiff.jacobian(f, x))
+        end
+    end
+    
+    # Compute coloring
+    colorvec = if hasproperty(backend, :coloring_algorithm) && !(backend.coloring_algorithm isa NoColoringAlgorithm)
+        SparseDiffTools.matrix_colors(sparsity, backend.coloring_algorithm)
+    else
+        SparseDiffTools.matrix_colors(sparsity)
+    end
+    
+    # Build cache and compute
+    jac_cache = ForwardDiffColorJacobianCache(f, x; colorvec=colorvec, sparsity=sparsity)
+    J = copy(sparsity)
+    SparseDiffTools.forwarddiff_color_jacobian!(J, f, x, jac_cache)
+    return J
 end
 
 
@@ -54,7 +118,7 @@ function evaluate_backend_performance(backend::AbstractADType, f, x, sparsity_pa
         
         # Compute accuracy metric (compare with finite differences)
         fd_jac = FiniteDiff.finite_difference_jacobian(f, x)
-        ad_jac = ADTypes.jacobian(backend, f, x)
+        ad_jac = jacobian(backend, f, x) # Fixed: use our jacobian
         metrics.accuracy = 1.0 / (1.0 + norm(fd_jac - ad_jac))
         
         # Sparsity efficiency

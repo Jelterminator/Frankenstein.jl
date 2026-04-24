@@ -126,7 +126,7 @@ end
 function evaluate_backend_score(backend::AutoSymbolics, n, sparsity, stiff, is_sp)
     # Symbolic is perfect but doesn't scale.
     # Symbolic is perfect but doesn't scale well beyond moderate sizes.
-    if n > 120
+    if n > 20
         return -100.0
     else
         return 110.0 # Prioritize symbolic for small-medium systems
