@@ -2,8 +2,6 @@
 
 **The Monster Solver — Compositional, Adaptive, and Nearly Sentient.**
 
-![Frankenstein.jl Banner](file:///C:/Users/jelte/.gemini/antigravity/brain/a24dd3ca-b0c5-4927-b24a-8e196b6dea36/frankenstein_banner_1777030311390.png)
-
 Frankenstein.jl is a "meta-solver" for the Julia SciML ecosystem. Built from the best stiff and non-stiff integrators (Tsit5, Rodas5, KenCarp4, FBDF, etc.), it dynamically assembles the ideal solver strategy for your problem using intelligent heuristics and modular adaptation.
 
 Stop wasting time picking algorithms. Just call the Monster.
