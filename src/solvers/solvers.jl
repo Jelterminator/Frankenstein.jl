@@ -13,7 +13,6 @@ module Solvers
 
 using DifferentialEquations
 using OrdinaryDiffEq
-using Sundials
 using LinearSolve
 using SparseArrays
 using ..FCore: FCore, SystemAnalysis, AbstractSolverStrategy

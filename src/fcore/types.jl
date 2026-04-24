@@ -63,7 +63,6 @@ struct AlgorithmRecommendation{Alg}
     handles_sparse::Bool           # Can efficiently handle sparse systems
     handles_mass_matrix::Bool      # Can handle mass matrices
     supports_events::Bool          # Supports event handling
-    is_sundials::Bool              # Flag for Sundials-specific keyword handling
     
     # Metadata
     description::String
@@ -81,14 +80,13 @@ struct AlgorithmRecommendation{Alg}
                                    handles_sparse::Bool=false,
                                    handles_mass_matrix::Bool=false,
                                    supports_events::Bool=true,
-                                   is_sundials::Bool=false,
                                    description::String="",
                                    references::Vector{String}=String[]) where {Alg}
         
         new{Alg}(alg, priority, category, min_accuracy, max_accuracy, 
                 memory_efficiency, computational_cost, stability_score,
                 stiffness_range, system_size_range, handles_sparse, 
-                handles_mass_matrix, supports_events, is_sundials, description, references)
+                handles_mass_matrix, supports_events, description, references)
     end
 end
 

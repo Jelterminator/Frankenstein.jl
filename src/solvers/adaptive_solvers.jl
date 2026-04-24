@@ -4,7 +4,6 @@ module AdaptiveSolvers
 
 using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, ADAPTIVE
 using OrdinaryDiffEq
-using Sundials
 
 #==============================================================================#
 # Adaptive Solver Strategy Definition
@@ -33,26 +32,6 @@ function build_adaptive_solver_catalogue()
             stiffness_range = (SL_NON_STIFF, SL_STIFF),
             supports_events = true,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
-
-        AlgorithmRecommendation(CVODE_Adams, 8.0, ADAPTIVE;
-            description = "SUNDIALS CVODE with Adams-Moulton adaptive multistep integration.",
-            memory_efficiency = 0.9,
-            computational_cost = 0.6,
-            stability_score = 0.75,
-            stiffness_range = (SL_NON_STIFF, SL_MILDLY_STIFF),
-            handles_mass_matrix = true,
-            supports_events = true,
-            references = ["https://computing.llnl.gov/projects/sundials"]),
-
-        AlgorithmRecommendation(CVODE_BDF, 9.0, ADAPTIVE;
-            description = "SUNDIALS CVODE with BDF and adaptive order/stiffness control.",
-            memory_efficiency = 0.8,
-            computational_cost = 0.7,
-            stability_score = 0.95,
-            stiffness_range = (SL_MILDLY_STIFF, SL_EXTREMELY_STIFF),
-            handles_mass_matrix = true,
-            supports_events = true,
-            references = ["https://computing.llnl.gov/projects/sundials"]),
 
         AlgorithmRecommendation(VCABM, 7.5, ADAPTIVE;
             description = "Variable-coefficient Adams–Bashforth–Moulton method (explicit).",

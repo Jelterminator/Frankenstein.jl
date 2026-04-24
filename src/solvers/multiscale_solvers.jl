@@ -2,7 +2,6 @@ module MultiscaleSolvers
 
 using DifferentialEquations
 using OrdinaryDiffEq
-using Sundials
 using LinearSolve
 using SparseArrays
 using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, MULTISCALE
@@ -170,23 +169,6 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
         ))
     end
     
-    # Heterogeneous multiscale methods (conceptual - would need custom implementation)
-    if multiscale_type == :complex_multiscale && sys_size == SS_LARGE_SYSTEM
-        
-        push!(recommendations, AlgorithmRecommendation(
-            CVODE_BDF(linear_solver=:GMRES), 8.2, MULTISCALE,
-            min_accuracy=1e-8,
-            max_accuracy=1e-2,
-            memory_efficiency=0.8,
-            computational_cost=0.7,
-            stability_score=0.9,
-            stiffness_range=(SL_STIFF, SL_VERY_STIFF),
-            system_size_range=(SS_LARGE_SYSTEM, SS_LARGE_SYSTEM),
-            handles_sparse=true,
-            description="CVODE BDF with adaptive time stepping for complex multiscale problems"
-        ))
-    end
-    
     # Waveform relaxation for loosely coupled multiscale systems
     if analysis.coupling_strength < 0.4 && multiscale_type in [:few_scale, :many_scale]
         
@@ -250,7 +232,7 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
             stability_score=rec.stability_score, stiffness_range=rec.stiffness_range,
             system_size_range=rec.system_size_range, handles_sparse=rec.handles_sparse,
             handles_mass_matrix=rec.handles_mass_matrix, supports_events=rec.supports_events,
-            is_sundials=rec.is_sundials, description=rec.description, references=rec.references
+            description=rec.description, references=rec.references
         )
     end
 

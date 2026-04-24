@@ -2,7 +2,9 @@
 
 **The Monster Solver — Compositional, Adaptive, and Nearly Sentient.**
 
-Frankenstein.jl is a "meta-solver" for the Julia SciML ecosystem. Built from the best stiff and non-stiff integrators (Tsit5, Rodas5, KenCarp4, CVODE, etc.), it dynamically assembles the ideal solver strategy for your problem using intelligent heuristics and modular adaptation.
+![Frankenstein.jl Banner](file:///C:/Users/jelte/.gemini/antigravity/brain/a24dd3ca-b0c5-4927-b24a-8e196b6dea36/frankenstein_banner_1777030311390.png)
+
+Frankenstein.jl is a "meta-solver" for the Julia SciML ecosystem. Built from the best stiff and non-stiff integrators (Tsit5, Rodas5, KenCarp4, FBDF, etc.), it dynamically assembles the ideal solver strategy for your problem using intelligent heuristics and modular adaptation.
 
 Stop wasting time picking algorithms. Just call the Monster.
 
@@ -64,17 +66,17 @@ Supports continuous and discrete callbacks via an internal `EventManager`. It ha
 ## 📖 Usage Guide
 
 ### Basic Usage
-The primary entry point is the `Frankenstein()` algorithm:
+The primary entry point is the `Monster()` algorithm:
 ```julia
-sol = solve(prob, Frankenstein())
+sol = solve(prob, Monster())
 ```
 
 ### Advanced Configuration
 You can provide hints to the Monster to guide its heuristics:
 ```julia
-sol = solve(prob, Frankenstein(), 
-            alg_hint = :stiff, 
-            backend = :enzyme, 
+sol = solve(prob, Monster(), 
+            prefer_stability = true, 
+            ad_available = [AutoForwardDiff(), AutoEnzyme()], 
             sparse = true)
 ```
 
@@ -82,23 +84,23 @@ sol = solve(prob, Frankenstein(),
 Full compatibility with SciML callbacks:
 ```julia
 cb = ContinuousCallback(condition, affect!)
-sol = solve(prob, Frankenstein(), callback=cb)
+sol = solve(prob, Monster(), callback=cb)
 ```
 
 ---
 
 ## 🏗 Roadmap & Status
 
-While the "Brain" of the Monster is highly capable of analyzing problem structures, the current focus is on stabilizing deep SciML backend integration and bringing dormant modules to life.
+While the "Brain" of the Monster is highly capable of analyzing problem structures, the current focus is on unlocking massive scale via preconditioning and specialized splitting.
 
 | Phase | Milestone | Status | Notes |
 | :--- | :--- | :--- | :--- |
 | **1** | Core Solver Interface & Routing | ✅ Complete | The `Monster()` wrapper is fully integrated with `SciMLBase` and standard ODE definitions. |
 | **2** | Structural System Analysis | ✅ Complete | A-priori detection of stiffness, sparsity density, and coupling architectures. |
-| **3** | Dynamic Backend Hot-Swapping | 🚧 In Progress | The "Surgery" fallback system is active, but currently battling upstream SciML cache dimension errors and `FunctionWrapper` strictness. |
-| **4** | Hybrid Dynamic Adaptation | 🚧 In Progress | Real-time transitions between stiff and non-stiff methods are wired up but require further stabilization. |
-| **5** | Preconditioning Pipeline | 🔴 Planned | The `src/preconditioning/` folder currently lies dormant. Implementing ILU and AMG preconditioners is required before large-scale GMRES/Krylov performance can be fully unlocked. |
-| **6** | Operator Splitting & Multiscale | 🔴 Planned | The `src/splitting/` folder is currently just a stub. Future support planned for multiscale PDE problems (e.g., separating stiff chemistry from non-stiff advection). |
+| **3** | Dynamic Backend Hot-Swapping | ✅ Complete | The "Surgery" system is now robust against AD dimension mismatches. **100% Native Julia implementation** (Sundials-free). |
+| **4** | Hybrid Dynamic Adaptation | ✅ Complete | Real-time transitions powered by `light_pulse` heartbeat diagnostics and multi-strategy `AdaptationController`. |
+| **5** | Preconditioning Pipeline | 🚧 In Progress | Implementing ILU and AMG preconditioners to unlock large-scale GMRES/Krylov performance. |
+| **6** | Operator Splitting & Multiscale | 🔴 Planned | Future support for separating stiff chemistry from non-stiff advection in multiscale PDE problems. |
 
 ---
 

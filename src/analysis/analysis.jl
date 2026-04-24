@@ -105,30 +105,30 @@ a heavy diagnosis. O(N) complexity.
 function light_pulse(analysis::SystemAnalysis, step::StepInfo)
     analysis.current_step = step.nsteps
     
-    # Trigger 1: Hard Failures (Rejects)
-    if step.rejects > 0
-        @debug "[Pulse] Trigger: Step Rejection"
+    # Trigger 1: Hard Failures (Consecutive Rejects) - Half sensitive (2 vs 1)
+    if step.rejects > 1
+        @debug "[Pulse] Trigger: Step Rejection ($step.rejects)"
         return true
     end
     
-    # Trigger 2: Stability Drift (dt collapse)
-    if step.dt < 0.1 * step.dt_prev && step.dt_prev > 1e-8
+    # Trigger 2: Stability Drift (dt collapse) - Half sensitive (0.05 vs 0.1)
+    if step.dt < 0.05 * step.dt_prev && step.dt_prev > 1e-8
         @debug "[Pulse] Trigger: dt collapse"
         return true
     end
     
-    # Trigger 3: Energy/Norm Spike
+    # Trigger 3: Energy/Norm Spike - Half sensitive (20.0 vs 10.0)
     norm_u = norm(step.u)
     norm_du = norm(step.du)
-    if analysis.last_norm_du > 0 && norm_du > 10.0 * analysis.last_norm_du
+    if analysis.last_norm_du > 0 && norm_du > 20.0 * analysis.last_norm_du
         @debug "[Pulse] Trigger: Derivative spike"
         analysis.last_norm_du = norm_du
         return true
     end
     analysis.last_norm_du = norm_du
     
-    # Trigger 4: Periodic Watchdog (Every 200 steps regardless)
-    if (analysis.current_step - analysis.last_update_step) >= 200
+    # Trigger 4: Periodic Watchdog - Half sensitive (400 vs 200)
+    if (analysis.current_step - analysis.last_update_step) >= 400
         @debug "[Pulse] Trigger: Periodic Watchdog"
         return true
     end

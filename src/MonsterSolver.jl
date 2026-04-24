@@ -6,6 +6,7 @@ using SparseArrays
 using SparseDiffTools
 using SparseMatrixColorings
 using ..FCore
+using OrdinaryDiffEq
 using ..Analysis
 using ..Solvers
 using ..Adaptation
@@ -65,7 +66,6 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
          ADTypes.AutoFiniteDiff()])
     
     backend_selection = Backends.choose_backend(analysis, ad_available; 
-                                             is_external_solver=rec.is_sundials,
                                              disabled_backends=Fs.disabled_backends)
     
     cfg = create_solver_configuration(rec, analysis, backend_selection)
@@ -89,7 +89,6 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
         
         ad_available_filtered = filter(b -> string(typeof(b)) != current_backend_name, ad_available)
         backend_selection = Backends.choose_backend(analysis, ad_available_filtered; 
-            is_external_solver=rec.is_sundials,
             disabled_backends=Fs.disabled_backends)
         
         cfg = create_solver_configuration(rec, analysis, backend_selection)
@@ -123,7 +122,6 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
                     @info "[Frankenstein] Surgery recommended: $(typeof(new_rec.algorithm)). Swapping..."
                     
                     new_backend_selection = Backends.choose_backend(analysis, ad_available; 
-                                                                  is_external_solver=new_rec.is_sundials,
                                                                   disabled_backends=Fs.disabled_backends)
                     
                     new_cfg = create_solver_configuration(new_rec, analysis, new_backend_selection)
@@ -163,7 +161,6 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
             # Re-select and retry
             ad_available_filtered = filter(b -> !(string(typeof(b)) in keys(Fs.disabled_backends)), ad_available)
             backend_selection = Backends.choose_backend(analysis, ad_available_filtered; 
-                is_external_solver=rec.is_sundials,
                 disabled_backends=Fs.disabled_backends)
             cfg = create_solver_configuration(rec, analysis, backend_selection)
             

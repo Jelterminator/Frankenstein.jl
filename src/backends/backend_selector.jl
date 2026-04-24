@@ -26,7 +26,6 @@ end
 """
 function choose_backend(analysis, 
                         available_backends;
-                        is_external_solver::Bool=false,
                         disabled_backends::Dict{String, Int}=Dict{String, Int}())
     
     current_step = analysis.current_step
@@ -55,16 +54,11 @@ function choose_backend(analysis,
     
     stiff = analysis.is_stiff || (!isnan(analysis.stiffness_ratio) && analysis.stiffness_ratio > 1000.0)
 
-    if is_external_solver
-        best_backend = AutoFiniteDiff()
-        best_score = 0.0
-    else
-        for backend in filtered_backends
-            score = evaluate_backend_score(backend, n, sparsity, stiff, is_sp)
-            if score > best_score
-                best_score     = score
-                best_backend   = backend
-            end
+    for backend in filtered_backends
+        score = evaluate_backend_score(backend, n, sparsity, stiff, is_sp)
+        if score > best_score
+            best_score     = score
+            best_backend   = backend
         end
     end
 

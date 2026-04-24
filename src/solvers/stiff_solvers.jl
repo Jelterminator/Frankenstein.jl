@@ -2,7 +2,6 @@ module StiffSolvers
 
 using DifferentialEquations
 using OrdinaryDiffEq
-using Sundials
 using LinearSolve
 using SparseArrays
 using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, STIFF
@@ -76,55 +75,29 @@ function get_stiff_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6,
     
     # BDF methods for very SL_STIFF problems
     if stiffness in [STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF]
-        if !is_sparse && sys_size != SS_LARGE_SYSTEM
-            push!(recommendations, AlgorithmRecommendation(
-                QNDF, 9.3, STIFF,
-                min_accuracy=1e-12,
-                max_accuracy=1e-2,
-                memory_efficiency=0.8,
-                computational_cost=0.6,
-                stability_score=0.95,
-                stiffness_range=(SL_STIFF, SL_EXTREMELY_STIFF),
-                system_size_range=(SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM),
-                description="Quasi-constant step BDF method, excellent for very SL_STIFF problems"
-            ))
-            
-            push!(recommendations, AlgorithmRecommendation(
-                FBDF, 8.9, STIFF,
-                min_accuracy=1e-10,
-                max_accuracy=1e-2,
-                memory_efficiency=0.75,
-                computational_cost=0.7,
-                stability_score=0.9,
-                stiffness_range=(SL_STIFF, SL_EXTREMELY_STIFF),
-                system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
-                description="Fixed-leading coefficient BDF, robust for SL_STIFF problems"
-            ))
-        end
+        push!(recommendations, AlgorithmRecommendation(
+            QNDF, 9.3, STIFF,
+            min_accuracy=1e-12,
+            max_accuracy=1e-2,
+            memory_efficiency=0.8,
+            computational_cost=0.6,
+            stability_score=0.95,
+            stiffness_range=(SL_STIFF, SL_EXTREMELY_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
+            description="Quasi-constant step BDF method, excellent for very SL_STIFF problems"
+        ))
         
-        # CVODE BDF for large SL_STIFF systems
-        if sys_size in [SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM]
-            linear_solver = if is_sparse
-                :GMRES
-            else
-                :Dense
-            end
-            
-            push!(recommendations, AlgorithmRecommendation(
-                CVODE_BDF, 9.1, STIFF,
-                min_accuracy=1e-12,
-                max_accuracy=1e-3,
-                memory_efficiency=0.85,
-                computational_cost=0.65,
-                stability_score=0.95,
-                stiffness_range=(SL_STIFF, SL_EXTREMELY_STIFF),
-                system_size_range=(SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM),
-                handles_sparse=true,
-                is_sundials=true,
-                description="SUNDIALS CVODE BDF method, excellent for large SL_STIFF systems",
-                references=["Hindmarsh et al. (2005)"]
-            ))
-        end
+        push!(recommendations, AlgorithmRecommendation(
+            FBDF, 8.9, STIFF,
+            min_accuracy=1e-10,
+            max_accuracy=1e-2,
+            memory_efficiency=0.75,
+            computational_cost=0.7,
+            stability_score=0.9,
+            stiffness_range=(SL_STIFF, SL_EXTREMELY_STIFF),
+            system_size_range=(SS_SMALL_SYSTEM, SS_LARGE_SYSTEM),
+            description="Fixed-leading coefficient BDF, robust for SL_STIFF problems"
+        ))
     end
     
     # Specialized methods for different conditions
@@ -206,20 +179,6 @@ function get_stiff_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6,
     # Sparse-optimized methods
     if is_sparse && sys_size == SS_LARGE_SYSTEM
         push!(recommendations, AlgorithmRecommendation(
-            CVODE_BDF, 9.0, STIFF,
-            min_accuracy=1e-12,
-            max_accuracy=1e-3,
-            memory_efficiency=0.9,
-            computational_cost=0.7,
-            stability_score=0.9,
-            stiffness_range=(SL_STIFF, SL_EXTREMELY_STIFF),
-            system_size_range=(SS_LARGE_SYSTEM, SS_LARGE_SYSTEM),
-            handles_sparse=true,
-            is_sundials=true,
-            description="CVODE BDF with GMRES for large sparse SL_STIFF systems"
-        ))
-        
-        push!(recommendations, AlgorithmRecommendation(
             TRBDF2, 8.4, STIFF,
             min_accuracy=1e-10,
             max_accuracy=1e-2,
@@ -277,7 +236,7 @@ function get_stiff_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6,
             stability_score=rec.stability_score, stiffness_range=rec.stiffness_range,
             system_size_range=rec.system_size_range, handles_sparse=rec.handles_sparse,
             handles_mass_matrix=rec.handles_mass_matrix, supports_events=rec.supports_events,
-            is_sundials=rec.is_sundials, description=rec.description, references=rec.references
+            description=rec.description, references=rec.references
         )
     end
 
