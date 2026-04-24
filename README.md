@@ -1,6 +1,6 @@
 # Frankenstein.jl 🧠⚡
 
-**The Monster Solver™ — Compositional, Adaptive, and Nearly Sentient.**
+**The Monster Solver — Compositional, Adaptive, and Nearly Sentient.**
 
 Frankenstein.jl is a "meta-solver" for the Julia SciML ecosystem. Built from the best stiff and non-stiff integrators (Tsit5, Rodas5, KenCarp4, CVODE, etc.), it dynamically assembles the ideal solver strategy for your problem using intelligent heuristics and modular adaptation.
 
