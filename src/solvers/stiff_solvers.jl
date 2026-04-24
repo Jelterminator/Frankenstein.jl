@@ -362,7 +362,7 @@ function recommend_stiff_solver(analysis::SystemAnalysis;
     
     if isempty(applicable)
         @warn "No applicable SL_STIFF solvers found, falling back to Rodas4P"
-        best_rec = AlgorithmRecommendation(Rodas4P(), 5.0, SL_STIFF)
+        best_rec = AlgorithmRecommendation(Rodas4P, 5.0, STIFF)
     else
         # Compute adjusted priorities and sort
         priorities = [compute_adjusted_priority(rec, analysis; 

@@ -26,7 +26,7 @@ end
 
 function build_adaptive_solver_catalogue()
     AlgorithmRecommendation[
-        AlgorithmRecommendation(QNDF(), 8.5, ADAPTIVE;
+        AlgorithmRecommendation(QNDF, 8.5, ADAPTIVE;
             description = "Quasi-Newton-based adaptive order solver (non-SL_STIFF or mildly SL_STIFF).",
             memory_efficiency = 0.7,
             stability_score = 0.8,
@@ -34,7 +34,7 @@ function build_adaptive_solver_catalogue()
             supports_events = true,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
-        AlgorithmRecommendation(CVODE_Adams(), 8.0, ADAPTIVE;
+        AlgorithmRecommendation(CVODE_Adams, 8.0, ADAPTIVE;
             description = "SUNDIALS CVODE with Adams-Moulton adaptive multistep integration.",
             memory_efficiency = 0.9,
             computational_cost = 0.6,
@@ -44,7 +44,7 @@ function build_adaptive_solver_catalogue()
             supports_events = true,
             references = ["https://computing.llnl.gov/projects/sundials"]),
 
-        AlgorithmRecommendation(CVODE_BDF(), 9.0, ADAPTIVE;
+        AlgorithmRecommendation(CVODE_BDF, 9.0, ADAPTIVE;
             description = "SUNDIALS CVODE with BDF and adaptive order/stiffness control.",
             memory_efficiency = 0.8,
             computational_cost = 0.7,
@@ -54,7 +54,7 @@ function build_adaptive_solver_catalogue()
             supports_events = true,
             references = ["https://computing.llnl.gov/projects/sundials"]),
 
-        AlgorithmRecommendation(VCABM(), 7.5, ADAPTIVE;
+        AlgorithmRecommendation(VCABM, 7.5, ADAPTIVE;
             description = "Variable-coefficient Adams–Bashforth–Moulton method (explicit).",
             memory_efficiency = 0.85,
             computational_cost = 0.4,

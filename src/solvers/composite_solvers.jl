@@ -89,7 +89,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         # KenCarp methods - High-order ESDIRK for stiff/mixed problems
         if sys_size != SS_LARGE_SYSTEM
             push!(recommendations, AlgorithmRecommendation(
-                KenCarp4(), 9.2, COMPOSITE,
+                KenCarp4, 9.2, COMPOSITE,
                 min_accuracy=1e-12,
                 max_accuracy=1e-4,
                 memory_efficiency=0.75,
@@ -102,7 +102,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
             ))
             
             push!(recommendations, AlgorithmRecommendation(
-                KenCarp5(), 8.9, COMPOSITE,
+                KenCarp5, 8.9, COMPOSITE,
                 min_accuracy=1e-14,
                 max_accuracy=1e-5,
                 memory_efficiency=0.7,
@@ -116,7 +116,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         
         # IMEX multistep methods
         push!(recommendations, AlgorithmRecommendation(
-            CNAB2(), 8.3, COMPOSITE,
+            CNAB2, 8.3, COMPOSITE,
             min_accuracy=1e-8,
             max_accuracy=1e-2,
             memory_efficiency=0.9,
@@ -128,7 +128,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         ))
         
         push!(recommendations, AlgorithmRecommendation(
-            CNLF2(), 8.0, COMPOSITE,
+            CNLF2, 8.0, COMPOSITE,
             min_accuracy=1e-7,
             max_accuracy=1e-2,
             memory_efficiency=0.9,
@@ -144,7 +144,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
     if is_mixed && analysis.is_sparse && explicit_frac > 0.3
         
         push!(recommendations, AlgorithmRecommendation(
-            SplitEuler(), 7.8, COMPOSITE,
+            SplitEuler, 7.8, COMPOSITE,
             min_accuracy=1e-6,
             max_accuracy=1e-1,
             memory_efficiency=0.95,
@@ -157,7 +157,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         ))
         
         push!(recommendations, AlgorithmRecommendation(
-            KenCarp3(), 8.7, COMPOSITE,
+            KenCarp3, 8.7, COMPOSITE,
             min_accuracy=1e-10,
             max_accuracy=1e-3,
             memory_efficiency=0.8,
@@ -169,7 +169,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         ))
         
         push!(recommendations, AlgorithmRecommendation(
-            KenCarp4(), 8.8, COMPOSITE,
+            KenCarp4, 8.8, COMPOSITE,
             min_accuracy=1e-12,
             max_accuracy=1e-3,
             memory_efficiency=0.75,
@@ -185,7 +185,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
     if stiffness in [SL_STIFF, SL_VERY_STIFF] && sys_size != SS_LARGE_SYSTEM && analysis.coupling_strength < 0.7
         
         push!(recommendations, AlgorithmRecommendation(
-            ETDRK4(), 8.6, COMPOSITE,
+            ETDRK4, 8.6, COMPOSITE,
             min_accuracy=1e-10,
             max_accuracy=1e-3,
             memory_efficiency=0.7,
@@ -198,7 +198,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         ))
         
         push!(recommendations, AlgorithmRecommendation(
-            ETDRK3(), 8.3, COMPOSITE,
+            ETDRK3, 8.3, COMPOSITE,
             min_accuracy=1e-8,
             max_accuracy=1e-2,
             memory_efficiency=0.75,
@@ -214,7 +214,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
     if stiffness in [SL_MILDLY_STIFF, SL_STIFF] && is_mixed
         
         push!(recommendations, AlgorithmRecommendation(
-            RosenbrockW6S4OS(), 8.4, COMPOSITE,
+            RosenbrockW6S4OS, 8.4, COMPOSITE,
             min_accuracy=1e-12,
             max_accuracy=1e-4,
             memory_efficiency=0.8,
@@ -226,7 +226,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         ))
         
         push!(recommendations, AlgorithmRecommendation(
-            Rodas5P(), 8.9, COMPOSITE,  # Also good for composite problems
+            Rodas5P, 8.9, COMPOSITE,  # Also good for composite problems
             min_accuracy=1e-12,
             max_accuracy=1e-4,
             memory_efficiency=0.85,
@@ -242,7 +242,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
     if stiffness == SL_MILDLY_STIFF && explicit_frac > 0.6
         
         push!(recommendations, AlgorithmRecommendation(
-            ROCK2(), 8.1, COMPOSITE,
+            ROCK2, 8.1, COMPOSITE,
             min_accuracy=1e-8,
             max_accuracy=1e-2,
             memory_efficiency=0.9,
@@ -254,7 +254,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         ))
         
         push!(recommendations, AlgorithmRecommendation(
-            ROCK4(), 8.2, COMPOSITE,
+            ROCK4, 8.2, COMPOSITE,
             min_accuracy=1e-10,
             max_accuracy=1e-2,
             memory_efficiency=0.85,
@@ -270,7 +270,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
     if is_sparse && sys_size == SS_LARGE_SYSTEM && is_mixed
         
         push!(recommendations, AlgorithmRecommendation(
-            TRBDF2(), 8.3, COMPOSITE,
+            TRBDF2, 8.3, COMPOSITE,
             min_accuracy=1e-8,
             max_accuracy=1e-2,
             memory_efficiency=0.8,
@@ -284,7 +284,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
         
         # SUNDIALS ARKODE for large IMEX problems
         push!(recommendations, AlgorithmRecommendation(
-            ARKODE(), 8.7, COMPOSITE,
+            ARKODE, 8.7, COMPOSITE,
             min_accuracy=1e-10,
             max_accuracy=1e-3,
             memory_efficiency=0.8,
@@ -307,7 +307,7 @@ function get_composite_recommendations(analysis::SystemAnalysis; rtol::Float64=1
     if explicit_frac > 0.5 && stiffness in [SL_MILDLY_STIFF, SL_STIFF]
         
         push!(recommendations, AlgorithmRecommendation(
-            SSPRK22(), 7.5, COMPOSITE,
+            SSPRK22, 7.5, COMPOSITE,
             min_accuracy=1e-6,
             max_accuracy=1e-2,
             memory_efficiency=0.95,
@@ -464,7 +464,7 @@ function recommend_composite_solver(analysis::SystemAnalysis;
     
     if isempty(applicable)
         @warn "No applicable composite solvers found, falling back to ARK324L2SA2"
-        best_rec = AlgorithmRecommendation(ARK324L2SA2(), 5.0, COMPOSITE)
+        best_rec = AlgorithmRecommendation(ARK324L2SA2, 5.0, COMPOSITE)
     else
         # Compute adjusted priorities and sort
         priorities = [compute_adjusted_priority(rec, analysis;

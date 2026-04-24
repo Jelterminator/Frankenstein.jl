@@ -2,6 +2,7 @@ module MonsterSolver
 
 using SciMLBase
 using ADTypes
+using SparseArrays
 using SparseDiffTools
 using SparseMatrixColorings
 using ..FCore
@@ -24,44 +25,48 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     frankenstein_kwargs = filter(x -> x.first in (:prefer_memory, :prefer_stability, :max_retries, :ad_available), kwargs)
     sciml_kwargs = filter(x -> !(x.first in (:prefer_memory, :prefer_stability, :max_retries, :ad_available)), kwargs)
 
-    # 1. Initial analysis and selection
-    analysis = analyze_system_structure(prob)
+    # 1. Initial Analysis
+    analysis = Analysis.analyze_system_structure(prob)
     
-    # Robust preparation: Standardize the ODEFunction and preserve existing jac_prototype.
-    # We also synchronize the sparsity pattern if detected.
+    # 2. Robust preparation: Standardize the ODEFunction
     raw_f = prob.f isa SciMLBase.ODEFunction ? prob.f.f : prob.f
     
-    # Safely get existing sparsity metadata
-    jp_existing = hasproperty(prob.f, :jac_prototype) ? prob.f.jac_prototype : nothing
-    colorvec_existing = hasproperty(prob.f, :colorvec) ? prob.f.colorvec : nothing
-    sparsity_existing = hasproperty(prob.f, :sparsity) ? prob.f.sparsity : nothing
-    
-    new_f = SciMLBase.ODEFunction(raw_f; 
-                       jac_prototype = (analysis.is_sparse && analysis.sparsity_pattern !== nothing) ? 
-                                       analysis.sparsity_pattern : jp_existing,
-                       colorvec = colorvec_existing,
-                       sparsity = (analysis.is_sparse && analysis.sparsity_pattern !== nothing) ? 
-                                  analysis.sparsity_pattern : sparsity_existing)
+    # Detect the correct pattern to use
+    new_pattern = if analysis.is_sparse && analysis.sparsity_pattern !== nothing
+        p = analysis.sparsity_pattern
+        p isa SparseArrays.SparseMatrixCSC ? p : sparse(p)
+    else
+        hasproperty(prob.f, :jac_prototype) ? prob.f.jac_prototype : nothing
+    end
 
+    # Use Non-Destructive remake [User Fix 4]
+    new_f = if prob.f isa SciMLBase.ODEFunction
+        SciMLBase.remake(prob.f; 
+                         f = raw_f,
+                         jac_prototype = new_pattern,
+                         sparsity = new_pattern !== nothing ? new_pattern : (hasproperty(prob.f, :sparsity) ? prob.f.sparsity : nothing))
+    else
+        SciMLBase.ODEFunction(raw_f; 
+                              jac_prototype = new_pattern,
+                              sparsity = new_pattern)
+    end
 
     prob = SciMLBase.remake(prob, f = new_f)
     
-    if analysis.is_sparse && analysis.sparsity_pattern !== nothing
-        @info "[Frankenstein] Synchronized detected sparsity pattern and disabled FunctionWrappers."
-    else
-        @info "[Frankenstein] Prepared ODEFunction for adaptive backends (FunctionWrappers disabled)."
-    end
-
+    # 3. Initial Configuration
     rec = select_algorithm(analysis; frankenstein_kwargs...)
     
-    # Select technical backends (AD and Linear Solver)
+    # Select technical backends
     ad_available = get(frankenstein_kwargs, :ad_available, 
-        [AutoForwardDiff(), 
-         AutoEnzyme(), 
-         AutoSparseForwardDiff(), 
-         AutoSymbolics(), 
-         AutoFiniteDiff()])
-    backend_selection = Backends.choose_backend(analysis, ad_available; is_external_solver=rec.is_sundials)
+        [ADTypes.AutoForwardDiff(), 
+         ADTypes.AutoEnzyme(), 
+         ADTypes.AutoSparse(ADTypes.AutoForwardDiff()), 
+         ADTypes.AutoSymbolics(), # FIX: Typo
+         ADTypes.AutoFiniteDiff()])
+    
+    backend_selection = Backends.choose_backend(analysis, ad_available; 
+                                             is_external_solver=rec.is_sundials,
+                                             disabled_backends=Fs.disabled_backends)
     
     cfg = create_solver_configuration(rec, analysis, backend_selection)
     
@@ -73,186 +78,141 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     @info "[Frankenstein] Initializing with $(typeof(cfg.algorithm))"
     @info "[Frankenstein] Backend selection: $(backend_selection.selection_rationale)"
     
-    # 2. Initialize the first integrator
-    # 2. Solver initialization with error handling
+    # 4. Solver initialization
     integrator = try
-        init(prob, cfg.algorithm; 
-             reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
+        init(prob, cfg.algorithm; reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
     catch err
-        @warn "[Frankenstein] Initial solver configuration failed: $err"
-        if occursin("FunctionWrapper", string(err)) || occursin("No matching function wrapper", string(err)) || occursin("Differentiation", string(err))
-            @warn "[Frankenstein] $(typeof(backend_selection.ad_backend)) failure during init. Retrying with next best backend..."
+        @warn "[Frankenstein] Initial solver configuration failed: $err. Pivoting..."
+        
+        current_backend_name = string(typeof(backend_selection.ad_backend))
+        Fs.disabled_backends[current_backend_name] = 999999
+        
+        ad_available_filtered = filter(b -> string(typeof(b)) != current_backend_name, ad_available)
+        backend_selection = Backends.choose_backend(analysis, ad_available_filtered; 
+            is_external_solver=rec.is_sundials,
+            disabled_backends=Fs.disabled_backends)
+        
+        cfg = create_solver_configuration(rec, analysis, backend_selection)
+        init(prob, cfg.algorithm; reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
+    end
+
+    # 5. Main integration loop
+    max_retries = get(frankenstein_kwargs, :max_retries, 5)
+    Fs.recovery_attempts = 0 # FIX: Initialization [User Fix 3]
+    
+    while integrator.t < prob.tspan[end]
+        try
+            step!(integrator)
             
-            # Record the failure and re-select
-            current_backend_name = string(typeof(backend_selection.ad_backend))
-            Fs.disabled_backends[current_backend_name] = 999999 # Disable practically forever for this run
+            # Pulse check & Adaptive surgery
+            # Construct StepInfo for the brain
+            step_info = StepInfo(integrator.u, integrator.uprev, integrator.dt, integrator.dtpropose, 
+                                 integrator.stats.nreject, integrator.stats.naccept + integrator.stats.nreject, integrator.t, 
+                                 integrator.p, integrator.sol.prob)
             
-            ad_available_filtered = filter(b -> string(typeof(b)) != current_backend_name, ad_available)
+            if Analysis.light_pulse(analysis, step_info)
+                @info "[Frankenstein] Pulse detected anomaly at t=$(integrator.t). Performing heavy diagnostics..."
+                
+                # Perform deep diagnostic
+                Analysis.heavy_diagnostic!(analysis, step_info)
+                
+                # New recommendation based on current state
+                new_rec = Adaptation.adapt!(controller, analysis, step_info)
+                
+                if new_rec !== nothing && typeof(new_rec.algorithm) != typeof(cfg.algorithm)
+                    @info "[Frankenstein] Surgery recommended: $(typeof(new_rec.algorithm)). Swapping..."
+                    
+                    new_backend_selection = Backends.choose_backend(analysis, ad_available; 
+                                                                  is_external_solver=new_rec.is_sundials,
+                                                                  disabled_backends=Fs.disabled_backends)
+                    
+                    new_cfg = create_solver_configuration(new_rec, analysis, new_backend_selection)
+                    
+                    # Perform the surgical swap
+                    integrator = reinit_with_new_alg(integrator, new_cfg.algorithm, integrator.u, integrator.t, sciml_kwargs)
+                    cfg = new_cfg # Update current config
+                    @info "[Frankenstein] Surgery Successful! Pivoting to: $(typeof(cfg.algorithm))"
+                end
+            end
+            
+        catch err
+            @error "[Frankenstein] Step failed with error: $err"
+            
+            if Fs.recovery_attempts >= max_retries
+                @error "[Frankenstein] Max retries reached. Simulation aborted."
+                throw(err)
+            end
+            
+            Fs.recovery_attempts += 1
+            @warn "[Frankenstein] Recovery attempt $(Fs.recovery_attempts)/$max_retries..."
+            
+            if occursin("DimensionMismatch", string(err)) || occursin("sparsity", string(err))
+                current_backend_name = string(typeof(backend_selection.ad_backend))
+                Fs.disabled_backends[current_backend_name] = 999999
+                @warn "[Frankenstein] Sparse AD mismatch detected. Disabling backend and performing Surgery..."
+            end
+            
+            # Emergency diagnostic and pivot
+            step_info = StepInfo(integrator.u, integrator.uprev, integrator.dt, integrator.dtpropose, 
+                                 integrator.stats.nreject, integrator.stats.naccept + integrator.stats.nreject, integrator.t, 
+                                 integrator.p, integrator.sol.prob)
+                                 
+            Analysis.heavy_diagnostic!(analysis, step_info)
+            new_rec = Adaptation.adapt!(controller, analysis, step_info)
+            
+            # Re-select and retry
+            ad_available_filtered = filter(b -> !(string(typeof(b)) in keys(Fs.disabled_backends)), ad_available)
             backend_selection = Backends.choose_backend(analysis, ad_available_filtered; 
                 is_external_solver=rec.is_sundials,
                 disabled_backends=Fs.disabled_backends)
             cfg = create_solver_configuration(rec, analysis, backend_selection)
             
-            @info "[Frankenstein] Recovered with $(typeof(backend_selection.ad_backend))"
-            init(prob, cfg.algorithm; reltol=cfg.reltol, abstol=cfg.abstol, sciml_kwargs...)
-        else
-            rethrow(err)
+            integrator = reinit_with_new_alg(integrator, cfg.algorithm, integrator.u, integrator.t, sciml_kwargs)
+            @info "[Frankenstein] Attempting recovery with: $(backend_selection.selection_rationale)"
         end
     end
-    max_retries = get(frankenstein_kwargs, :max_retries, 3)
-    
-    # 3. Main stepping loop
-    while integrator.t < integrator.sol.prob.tspan[2]
-        # Perform one or more steps
-        try
-            step!(integrator)
-        catch err
-            @error "[Frankenstein] Step failed with error: $err"
-            
-            # Check if this was a differentiation error (e.g. Enzyme crash)
-            if occursin("Differentiation", string(typeof(err))) || occursin("Autodiff", string(typeof(err)))
-                @warn "[Frankenstein] Differentiation failure detected. Disabling backend for 1000 steps and performing Surgery..."
-                
-                # Record the disablement (current step + 1000)
-                current_backend_name = string(typeof(backend_selection.ad_backend))
-                Fs.disabled_backends[current_backend_name] = analysis.current_step + 1000
-                
-                # Re-select backend
-                backend_selection = Backends.choose_backend(analysis, ad_available; 
-                    is_external_solver=rec.is_sundials,
-                    disabled_backends=Fs.disabled_backends)
-                cfg = create_solver_configuration(rec, analysis, backend_selection)
-                
-                @info "[Frankenstein] Surgery Successful! Pivoting to: $(typeof(cfg.algorithm))"
-                @info "[Frankenstein] New Backend: $(backend_selection.selection_rationale)"
-                
-                integrator = reinit_with_new_alg(integrator, cfg.algorithm, integrator.u, integrator.t)
-                continue
-            end
 
-            if retry_count < max_retries
-                integrator = handle_instability!(integrator, retry_count)
-                retry_count += 1
-                continue
-            else
-                rethrow(err)
-            end
-        end
-        
-        # Check for solver-indicated failures or excessive rejections
-        if integrator.sol.retcode != ReturnCode.Default && integrator.sol.retcode != ReturnCode.Success
-            if retry_count < max_retries
-                @warn "[Frankenstein] Solver reported $(integrator.sol.retcode). Retrying..."
-                integrator = handle_instability!(integrator, retry_count)
-                retry_count += 1
-                continue
-            else
-                break
-            end
-        end
-
-        # 4. Periodic Analysis & Adaptation Update
-        stats = hasproperty(integrator, :stats) ? integrator.stats : (hasproperty(integrator, :destats) ? integrator.destats : nothing)
-        rejects = stats !== nothing && hasproperty(stats, :nreject) ? stats.nreject : 0
-        nsteps = stats !== nothing && hasproperty(stats, :naccept) ? stats.naccept : (stats !== nothing && hasproperty(stats, :nsteps) ? stats.nsteps : 0)
-        
-        du_buffer = similar(integrator.u)
-        integrator.f(du_buffer, integrator.u, integrator.p, integrator.t)
-        
-        # Safe access for dt and dtcache (Sundials etc might not have them)
-        curr_dt = hasproperty(integrator, :dt) ? integrator.dt : (hasproperty(integrator, :dt_prev) ? integrator.dt_prev : 0.0)
-        curr_dtcache = hasproperty(integrator, :dtcache) ? integrator.dtcache : curr_dt
-
-        step_info = FCore.StepInfo(
-            integrator.u, 
-            du_buffer, 
-            curr_dt, 
-            curr_dtcache,
-            rejects,
-            nsteps,
-            integrator.t,
-            integrator.p,
-            integrator.sol.prob
-        )
-        
-        # TIERED DIAGNOSTICS:
-        # Step 1: Light Pulse (Every Step)
-        if light_pulse(analysis, step_info)
-            # Step 2: Heavy Diagnosis (Triggered)
-            heavy_diagnostic!(analysis, step_info)
-            
-            # Step 3: Adaptation & Potential Surgery
-            new_rec = adapt!(controller, analysis, step_info)
-            
-            if new_rec !== nothing && typeof(new_rec.algorithm) != typeof(cfg.algorithm)
-                @info "[Frankenstein] Surgery required! Swapping $(typeof(cfg.algorithm)) -> $(typeof(new_rec.algorithm)) at t=$(integrator.t)"
-                
-                # Store state
-                u_fixed = copy(integrator.u)
-                t_fixed = integrator.t
-                
-                # Reinitialize current integrator with new algorithm
-                backend_selection = Backends.choose_backend(analysis, ad_available)
-                new_cfg = create_solver_configuration(new_rec, analysis, backend_selection)
-                cfg = new_cfg
-                rec = new_rec
-                
-                integrator = reinit_with_new_alg(integrator, cfg.algorithm, u_fixed, t_fixed)
-
-                # Reset retry count on successful adaptation
-                retry_count = 0
-            end
-        end
-        
-        # Monitor for high rejection rate
-        if rejects > 5 && retry_count < max_retries
-             @warn "[Frankenstein] High rejection rate detected ($rejects). Tuning tolerances..."
-             integrator = handle_instability!(integrator, retry_count)
-             retry_count += 1
-        end
-    end
-    
-    return solve!(integrator)
+    return SciMLBase.solution_new_retcode(integrator.sol, :Success)
 end
 
-"""
-    SciMLBase.solve(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
-
-Extends SciMLBase.solve to dispatch to the Monster Solver logic.
-"""
-function SciMLBase.solve(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
-    return monster_solve!(prob, Fs; kwargs...)
-end
-
-function handle_instability!(integrator, retry_count)
-    u = copy(integrator.u)
-    t = integrator.t
+# Internal helpers for surgery
+function reinit_with_new_alg(integrator, new_alg, u, t, sciml_kwargs)
     prob = integrator.sol.prob
+    new_prob = SciMLBase.remake(prob, u0 = u, tspan = (t, prob.tspan[end]))
     
-    # Tighten tolerances
-    new_reltol = integrator.opts.reltol * 0.1
-    new_abstol = integrator.opts.abstol * 0.1
+    # Preserve key properties
+    reltol = integrator.opts.reltol
+    abstol = integrator.opts.abstol
     
-    @info "[Frankenstein] Retrying instability at t=$t. New reltol=$new_reltol"
-    
-    new_alg = integrator.alg
-    
-    # Reinitialize with tighter tolerances and more iterations
-    new_prob = ODEProblem(prob.f, u, (t, prob.tspan[2]), prob.p)
-    return init(new_prob, new_alg; 
-        reltol=new_reltol, 
-        abstol=new_abstol,
-        maxiters=Int(1e7),
-        callback=integrator.opts.callback)
+    return init(new_prob, new_alg; reltol=reltol, abstol=abstol, sciml_kwargs...)
 end
 
-function reinit_with_new_alg(integrator, new_alg, u, t)
-    prob = integrator.sol.prob
-    new_prob = ODEProblem(prob.f, u, (t, prob.tspan[2]), prob.p)
-    return init(new_prob, new_alg; 
-        reltol=integrator.opts.reltol, 
-        abstol=integrator.opts.abstol,
-        callback=integrator.opts.callback)
+function should_trigger_adaptation(controller, integrator)
+    # Placeholder for pulse logic
+    # e.g. monitor step size drops or reject rates
+    return false
+end
+
+function diagnose_system(integrator)
+    # Placeholder for heavy diagnostics
+    return nothing
+end
+
+function recommend_adaptation(controller, integrator, diagnosis)
+    # Placeholder for adaptation logic
+    return nothing
 end
 
 end # module
+
+# Extend SciMLBase to support solve(prob, FrankensteinSolver())
+import SciMLBase
+import .MonsterSolver: monster_solve!
+
+function SciMLBase.solve(prob::SciMLBase.ODEProblem, Fs::Frankenstein.FCore.FrankensteinSolver; kwargs...)
+    return monster_solve!(prob, Fs; kwargs...)
+end
+
+function SciMLBase.__solve(prob::SciMLBase.ODEProblem, Fs::Frankenstein.FCore.FrankensteinSolver; kwargs...)
+    return monster_solve!(prob, Fs; kwargs...)
+end

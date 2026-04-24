@@ -150,7 +150,7 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
     
     # Simplified multiscale recommendations for stability
     push!(recommendations, AlgorithmRecommendation(
-        ImplicitEuler(), 8.0, MULTISCALE,
+        ImplicitEuler, 8.0, MULTISCALE,
         description="Robust implicit Euler for multiscale problems"
     ))
     
@@ -158,7 +158,7 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
     if multiscale_type in [:many_scale, :complex_multiscale] && sep.epsilon < 0.01
         
         push!(recommendations, AlgorithmRecommendation(
-            SSPRK22(), 7.8, MULTISCALE,
+            SSPRK22, 7.8, MULTISCALE,
             min_accuracy=1e-6,
             max_accuracy=1e-2,
             memory_efficiency=0.9,
@@ -191,7 +191,7 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
     if analysis.coupling_strength < 0.4 && multiscale_type in [:few_scale, :many_scale]
         
         push!(recommendations, AlgorithmRecommendation(
-            SplitEuler(), 7.5, MULTISCALE,
+            SplitEuler, 7.5, MULTISCALE,
             min_accuracy=1e-6,
             max_accuracy=1e-1,
             memory_efficiency=0.95,
@@ -208,7 +208,7 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
     if multiscale_type != :single_scale
         
         push!(recommendations, AlgorithmRecommendation(
-            TRBDF2(), 8.1, MULTISCALE,
+            TRBDF2, 8.1, MULTISCALE,
             min_accuracy=1e-8,
             max_accuracy=1e-2,
             memory_efficiency=0.8,
@@ -222,7 +222,7 @@ function get_multiscale_recommendations(analysis::SystemAnalysis; rtol::Float64=
         
         # Rosenbrock methods with automatic stiffness detection
         push!(recommendations, AlgorithmRecommendation(
-            Rodas5P(), 8.5, MULTISCALE,
+            Rodas5P, 8.5, MULTISCALE,
             min_accuracy=1e-10,
             max_accuracy=1e-3,
             memory_efficiency=0.85,
@@ -405,7 +405,7 @@ function recommend_multiscale_solver(analysis::SystemAnalysis;
     
     if isempty(applicable)
         @warn "No applicable multiscale solvers found, falling back to Rodas5P"
-        best_rec = AlgorithmRecommendation(Rodas5P(), 5.0, MULTISCALE)
+        best_rec = AlgorithmRecommendation(Rodas5P, 5.0, MULTISCALE)
     else
         # Compute adjusted priorities with multiscale efficiency bonus
         priorities = Float64[]

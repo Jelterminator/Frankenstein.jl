@@ -106,12 +106,18 @@ end
 
 # Internal helper to handle the wrapped ADTypes.AutoSparse
 function evaluate_backend_score(backend::AutoSparse, n, sparsity, stiff, is_sp)
-    # Sparse AD is the king of PDEs. 
+    # Sparse AD is the king of PDEs, but for small systems (n < 200), 
+    # dense AD is often more robust and just as fast.
     if !is_sp
         return -500.0 # Heavy penalty for using sparse on dense
     end
     
-    # Base score is extremely high to prioritize sparsity
+    if n < 200
+        # Reduce priority for small sparse systems to favor robust dense AD
+        return 50.0
+    end
+    
+    # Base score is extremely high for larger sparse systems
     base_score = 500.0
     
     # We add a bonus if the coloring algorithm is high-quality (like GreedyColoring)
@@ -123,7 +129,7 @@ function evaluate_backend_score(backend::AutoSparse, n, sparsity, stiff, is_sp)
     return base_score + coloring_bonus
 end
 
-function evaluate_backend_score(backend::AutoSymbolics, n, sparsity, stiff, is_sp)
+function evaluate_backend_score(backend::ADTypes.AutoSymbolics, n, sparsity, stiff, is_sp)
     # Symbolic is perfect but doesn't scale.
     # Symbolic is perfect but doesn't scale well beyond moderate sizes.
     if n > 20
@@ -151,7 +157,7 @@ function generate_rationale(backend, n, sparsity, stiff)
         return "Enzyme: High-performance reverse-mode scaling for large dense systems (n=$n)."
     elseif backend isa AutoSparse
         return "Sparse AD: Exploiting $(round(sparsity*100, digits=2))% density for PDE-optimal scaling."
-    elseif backend isa AutoSymbolics
+    elseif backend isa ADTypes.AutoSymbolics
         return "Symbolics: Exact analytical precision for small-kernel system."
     else
         return "Backend: $(typeof(backend))"

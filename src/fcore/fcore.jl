@@ -79,11 +79,12 @@ mutable struct FrankensteinSolver <: AbstractMonsterSolver
     analysis::Any      # Will hold SystemAnalysis
     adaptation::Any    # hold AdaptationState
     disabled_backends::Dict{String, Int} # Backend Name => disabled until step N
+    recovery_attempts::Int
 end
 
 # Constructor
 function FrankensteinSolver(; kwargs...)
-    return FrankensteinSolver(nothing, nothing, nothing, Dict{String, Int}())
+    return FrankensteinSolver(nothing, nothing, nothing, Dict{String, Int}(), 0)
 end
 
 # (solve dispatch moved to MonsterSolver.jl)

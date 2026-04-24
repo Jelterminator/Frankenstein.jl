@@ -51,7 +51,7 @@ end
 function build_specialty_solver_catalogue()
     AlgorithmRecommendation[
         # 1. Structure Preserving / Symplectic
-        AlgorithmRecommendation(SymplecticEuler(), 8.5, SPECIALTY;
+        AlgorithmRecommendation(SymplecticEuler, 8.5, SPECIALTY;
             description = "Symplectic Euler: Best for long-term energy conservation in simple Hamiltonian systems.",
             memory_efficiency = 0.95,
             stability_score = 0.8,
@@ -60,7 +60,7 @@ function build_specialty_solver_catalogue()
             references = ["https://en.wikipedia.org/wiki/Symplectic_integrator"]),
 
         # 2. Extreme Accuracy (Niche beyond Vern9)
-        AlgorithmRecommendation(Feagin12(), 9.5, SPECIALTY;
+        AlgorithmRecommendation(Feagin12, 9.5, SPECIALTY;
             description = "Feagin 12th order: The 'Gold Standard' for extreme accuracy requirements (rtol < 1e-14).",
             memory_efficiency = 0.3,
             computational_cost = 0.95,
@@ -69,7 +69,7 @@ function build_specialty_solver_catalogue()
             system_size_range = (SS_SMALL_SYSTEM, SS_SMALL_SYSTEM),
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
-        AlgorithmRecommendation(Feagin14(), 9.0, SPECIALTY;
+        AlgorithmRecommendation(Feagin14, 9.0, SPECIALTY;
             description = "Feagin 14th order: Maximum precision for extremely small systems.",
             memory_efficiency = 0.2,
             computational_cost = 1.0,

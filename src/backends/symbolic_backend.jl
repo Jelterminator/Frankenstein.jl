@@ -16,15 +16,15 @@ using SciMLBase
 Configure symbolic differentiation backend.
 """
 function configure_symbolic()
-    return AutoSymbolics()
+    return ADTypes.AutoSymbolics()
 end
 
 """
-    jacobian(::AutoSymbolic, f, x)
+    jacobian(::ADTypes.AutoSymbolics, f, x)
 
 Compute Jacobian using symbolic differentiation.
 """
-function jacobian(::AutoSymbolics, f, x)
+function jacobian(::ADTypes.AutoSymbolics, f, x)
     # 0. Robust unwrapping for SciML functions to bypass FunctionWrappers
     # Symbolics cannot trace through a FunctionWrapper limited to Float64.
     raw_f = if f isa SciMLBase.ODEFunction

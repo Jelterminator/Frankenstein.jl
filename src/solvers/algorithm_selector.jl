@@ -12,6 +12,7 @@ using ADTypes
 using LinearSolve
 using SparseMatrixColorings
 using ..FCore
+using ..Backends
 
 using ..ExplicitSolvers: get_explicit_recommendations
 using ..StiffSolvers: get_stiff_recommendations
@@ -121,7 +122,7 @@ function create_solver_configuration(rec, analysis, backend_selection;
     if (occursin("Rodas", alg_name) || occursin("Rosenbrock", alg_name))
         if ad_backend isa AutoForwardDiff
             final_ad = true
-        elseif ad_backend isa AutoSymbolics
+        elseif ad_backend isa ADTypes.AutoSymbolics # FIX: Typo
             # Rosenbrock methods in OrdinaryDiffEq sometimes fail with NoFunctionWrapperFoundError
             # when passed AutoSymbolics() directly. Mapping to true (ForwardDiff)
             # avoids this while maintaining high performance. 
@@ -132,19 +133,20 @@ function create_solver_configuration(rec, analysis, backend_selection;
 
     # 3. Sparse Coloring & Pattern Injection
     final_ad = if ad_backend isa ADTypes.AutoSparse
-        # If it's a sparse backend, we ensure it has a coloring algorithm and 
-        # is synchronized with our detected pattern.
+        # If it's a sparse backend, we ensure it has a coloring algorithm.
+        # We use AutoFiniteDiff as it is often more robust to minor sparsity mismatches
+        # between detection and the internal cache.
         if (analysis.is_sparse || analysis.sparsity_pattern !== nothing)
-            @info "[Frankenstein] Injecting Symbolics Sparsity and Greedy Coloring for sparse AD."
+            @info "[Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling."
             
-            ADTypes.AutoSparse(ad_backend.dense_ad; 
-                               sparsity_detector = ADTypes.SymbolicsSparsityDetector(),
+            ADTypes.AutoSparse(ADTypes.AutoFiniteDiff(); 
+                               sparsity_detector = Backends.PrecomputedSparsityDetector(analysis.sparsity_pattern),
                                coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
         else
-            ad_backend
+            final_ad # FIX: Return final_ad instead of ad_backend
         end
     else
-        ad_backend
+        final_ad # FIX: Return final_ad instead of ad_backend
     end
 
     # 4. Cohesive unit instantiation

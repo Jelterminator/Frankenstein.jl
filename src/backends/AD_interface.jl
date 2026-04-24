@@ -13,6 +13,28 @@ using ForwardDiff
 using FiniteDiff
 using SparseDiffTools
 
+export PrecomputedSparsityDetector
+
+"""
+    PrecomputedSparsityDetector(pattern)
+    
+Custom sparsity detector that simply returns a precomputed pattern.
+Matches the 4-argument signature required by DifferentiationInterface for in-place functions.
+"""
+struct PrecomputedSparsityDetector{P} <: ADTypes.AbstractSparsityDetector
+    pattern::P
+end
+
+# 3-argument signature (out-of-place)
+function ADTypes.jacobian_sparsity(f, x, detector::PrecomputedSparsityDetector)
+    return detector.pattern
+end
+
+# 4-argument signature (in-place) [User Fix 2]
+function ADTypes.jacobian_sparsity(f, y, x, detector::PrecomputedSparsityDetector)
+    return detector.pattern
+end
+
 """
     jacobian(backend, f, x)
 
@@ -120,29 +142,29 @@ end
 
 Check if a backend is suitable for the given problem characteristics.
 """
-function is_backend_suitable(backend::AbstractADType, problem_size::Int, sparsity_ratio::Float64)
+function is_backend_suitable(backend::ADTypes.AbstractADType, problem_size::Int, sparsity_ratio::Float64)
     # ForwardDiff is efficient for small to medium problems
-    if backend isa AutoForwardDiff
+    if backend isa ADTypes.AutoForwardDiff
         return problem_size <= 100
     end
     
     # Finite differences are universal but slow
-    if backend isa AutoFiniteDiff
+    if backend isa ADTypes.AutoFiniteDiff
         return true
     end
     
     # Sparse ForwardDiff for sparse problems
-    if backend isa AutoSparseForwardDiff
+    if backend isa ADTypes.AutoSparse && hasproperty(backend, :ad_backend) && backend.ad_backend isa ADTypes.AutoForwardDiff
         return sparsity_ratio < 0.1  # Less than 10% dense
     end
     
     # Enzyme for large problems (when available)
-    if backend isa AutoEnzyme
+    if backend isa ADTypes.AutoEnzyme
         return problem_size >= 50
     end
     
     # Symbolic for small analytical problems
-    if backend isa AutoSymbolics
+    if backend isa ADTypes.AutoSymbolics
         return problem_size <= 20
     end
     
