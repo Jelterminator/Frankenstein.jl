@@ -2,6 +2,9 @@ module FCore
 
 using SciMLBase
 
+# Include fundamental types and enums
+include("types.jl")
+
 # Export public API for other modules
 export FrankensteinSolver,
        SystemAnalysis, StepInfo,
@@ -19,14 +22,24 @@ export FrankensteinSolver,
 # Exported API
 export # Categories and Levels
        SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel,
-       EXPLICIT, STIFF, COMPOSITE, MULTISCALE, SPARSE, ADAPTIVE, PARALLEL, SPECIALTY,
+       EXPLICIT, STABILIZED_EXPLICIT, STIFF, COMPOSITE, MULTISCALE, SPARSE, ADAPTIVE, PARALLEL, SPECIALTY,
        SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF,
-       SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM,
+       SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, SS_EXTREME_SYSTEM,
        LOW_ACCURACY, STANDARD_ACCURACY, HIGH_ACCURACY,
        AlgorithmRecommendation,
        is_applicable, compute_adjusted_priority,
        classify_stiffness, classify_system_size, classify_accuracy_level,
-       requires_sparse_handling, is_well_conditioned, has_multiscale_behavior
+       requires_sparse_handling, is_well_conditioned, has_multiscale_behavior,
+       
+       # Hysteresis Borders
+       BORDER_STIFF_UP, BORDER_STIFF_DOWN
+
+#==============================================================================#
+# Constants & Hysteresis Borders
+#==============================================================================#
+
+const BORDER_STIFF_UP = 1000.0   # Non-Stiff -> Stiff
+const BORDER_STIFF_DOWN = 100.0  # Stiff -> Non-Stiff
 
 #==============================================================================#
 # Abstract Types
@@ -80,60 +93,12 @@ mutable struct FrankensteinSolver <: AbstractMonsterSolver
     adaptation::Any    # hold AdaptationState
     disabled_backends::Dict{String, Int} # Backend Name => disabled until step N
     recovery_attempts::Int
+    original_f::Any    # The unwrapped user function
 end
 
 # Constructor
 function FrankensteinSolver(; kwargs...)
-    return FrankensteinSolver(nothing, nothing, nothing, Dict{String, Int}(), 0)
-end
-
-# (solve dispatch moved to MonsterSolver.jl)
-
-"""
-    SystemAnalysis{T}
-"""
-mutable struct SystemAnalysis{T}
-    stiffness_ratio::T
-    is_stiff::Bool
-    sparsity_pattern::Any
-    timescales::Vector{T}
-    coupling_strength::T
-    condition_number::T
-    system_size::Int
-    is_sparse::Bool
-    jacobian::Any
-    stable_count::Int
-    last_update_step::Int
-    current_step::Int
-    last_norm_du::T
-    last_jacobian_update::Int
-    history::Vector{Any}
-end
-
-function SystemAnalysis{T}() where T
-    return SystemAnalysis{T}(
-        T(NaN), false, nothing, T[], T(NaN), T(NaN), 
-        0, false, nothing, 0, 0, 0, T(0), 0, Any[]
-    )
-end
-
-function SystemAnalysis()
-    return SystemAnalysis{Float64}()
-end
-
-"""
-    StepInfo{T, P}
-"""
-struct StepInfo{T, P}
-    u::Vector{T}
-    du::Vector{T}
-    dt::T
-    dt_prev::T
-    rejects::Int
-    nsteps::Int
-    t::T
-    p::P
-    prob::SciMLBase.ODEProblem
+    return FrankensteinSolver(nothing, nothing, nothing, Dict{String, Int}(), 0, nothing)
 end
 
 """
@@ -169,8 +134,5 @@ mutable struct AdaptationState
     history::Vector{Any}
     AdaptationState(strategy::AbstractAdaptationStrategy) = new(strategy, Any[])
 end
-
-# Include sub-files
-include("types.jl")
 
 end # module FCore

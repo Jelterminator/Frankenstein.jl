@@ -55,17 +55,31 @@ function analyze_system_structure(prob::ODEProblem)
     # IMPROVED: Use the user's prototype if it exists, otherwise use what we derived
     sparsity_pattern = proto !== nothing ? proto : (is_sparse ? sparse(J) : nothing)
     
-    # 4. Perform further analyses
-    stiffness = initial_stiffness_estimate(f, u0, p, J0=J)
-    timescales = initial_timescale_analysis(J)
-    coupling = estimate_coupling_strength(J)
-    condition = try cond(collect(J)) catch; 1.0 end
+    # 4. Perform further analyses (Lazy if system is small/medium)
+    stiffness = 0.0
+    timescales = Float64[]
+    coupling = 0.0
+    condition = 1.0
+
+    if system_size < 200
+        stiffness = initial_stiffness_estimate(f, u0, p, J0=J)
+        timescales = initial_timescale_analysis(J)
+        coupling = estimate_coupling_strength(J)
+        condition = try cond(collect(J)) catch; 1.0 end
+    else
+        # Large sparse systems: avoid expensive dense analysis, use opnorm proxy
+        stiffness = initial_stiffness_estimate(f, u0, p, J0=J)
+        timescales = Float64[]
+        coupling = 0.0 # Skip for large systems
+        condition = try opnorm(J, 1) catch; 1.0 end
+        @info "[Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy."
+    end
 
     @info "[Frankenstein Analysis] System Size: $system_size | Sparse: $is_sparse | Density: $(round(density*100, digits=2))%"
 
     return SystemAnalysis{Float64}(
         stiffness, stiffness > 1e4, sparsity_pattern, timescales, coupling, condition, 
-        system_size, is_sparse, J, 0, 0, 0, 0.0, 0, Any[]
+        system_size, is_sparse, J, 0, -100, t0, 0, 0.0, 0, 0, -100, 50, 10000, EXPLICIT, Dict{Symbol, Any}()
     )
 end
 
@@ -105,31 +119,59 @@ a heavy diagnosis. O(N) complexity.
 function light_pulse(analysis::SystemAnalysis, step::StepInfo)
     analysis.current_step = step.nsteps
     
-    # Trigger 1: Hard Failures (Consecutive Rejects) - Half sensitive (2 vs 1)
-    if step.rejects > 1
-        @debug "[Pulse] Trigger: Step Rejection ($step.rejects)"
+    # 1. Hard Failures (Emergency Trigger)
+    new_rejects = step.rejects - analysis.last_reject_count
+    steps_since_update = analysis.current_step - analysis.last_update_step
+    
+    # Trigger if we have >= 5 rejections AND they constitute a high rejection rate (> 50%)
+    # This prevents normal occasional rejections in stiff solvers from spamming diagnostics over long cooldowns.
+    if new_rejects >= 5 && new_rejects > 0.5 * steps_since_update
+        @info "[Pulse] Trigger: Emergency - High Rejection Rate ($new_rejects rejects in $steps_since_update steps)"
         return true
     end
     
-    # Trigger 2: Stability Drift (dt collapse) - Half sensitive (0.05 vs 0.1)
-    if step.dt < 0.05 * step.dt_prev && step.dt_prev > 1e-8
-        @debug "[Pulse] Trigger: dt collapse"
-        return true
+    # 2. Adaptive Cooldown
+    if (analysis.current_step - analysis.last_update_step) < analysis.diagnostic_cooldown
+        # In cooldown, block all diagnostics. Emergencies (>=3 rejects) are already caught above.
+        return false
     end
     
-    # Trigger 3: Energy/Norm Spike - Half sensitive (20.0 vs 10.0)
-    norm_u = norm(step.u)
+    # 3. RICE'S ASP: Hysteresis Border Check (The "New Model")
+    # This is the cheap O(N) check that prevents "Diagnostic Spam"
+    f = step.prob.f
+    cheap_ρ = Stiffness.cheap_spectral_radius_estimate(f, step.u, step.p, step.t)
+    
+    # Update current estimate in analysis (without heavy diagnostic)
+    analysis.stiffness_ratio = cheap_ρ 
+    
+    current_cat = analysis.current_category
+    
+    if current_cat == EXPLICIT || current_cat == STABILIZED_EXPLICIT
+        # Crossing UP into Stiff territory?
+        if cheap_ρ > BORDER_STIFF_UP
+            @info "[Pulse] Trigger: Border Crossing UP ($cheap_ρ > $BORDER_STIFF_UP)"
+            return true
+        end
+    elseif current_cat == STIFF || current_cat == SPARSE
+        # Crossing DOWN into Explicit territory?
+        if cheap_ρ < BORDER_STIFF_DOWN
+            @info "[Pulse] Trigger: Border Crossing DOWN ($cheap_ρ < $BORDER_STIFF_DOWN)"
+            return true
+        end
+    end
+    
+    # 4. Feature Space Jump (Massive derivative spike)
     norm_du = norm(step.du)
-    if analysis.last_norm_du > 0 && norm_du > 20.0 * analysis.last_norm_du
-        @debug "[Pulse] Trigger: Derivative spike"
-        analysis.last_norm_du = norm_du
+    if analysis.last_norm_du > 0 && norm_du > 1000.0 * analysis.last_norm_du
+        @info "[Pulse] Trigger: Feature Space Jump (Norm Spike)"
+        analysis.last_norm_du = norm_du 
         return true
     end
     analysis.last_norm_du = norm_du
     
-    # Trigger 4: Periodic Watchdog - Half sensitive (400 vs 200)
-    if (analysis.current_step - analysis.last_update_step) >= 400
-        @debug "[Pulse] Trigger: Periodic Watchdog"
+    # 5. Long-term Watchdog (Amortized)
+    if (analysis.current_step - analysis.last_update_step) >= analysis.watchdog_interval
+        @debug "[Pulse] Trigger: Periodic Watchdog (interval: $(analysis.watchdog_interval))"
         return true
     end
     
@@ -155,6 +197,8 @@ function heavy_diagnostic!(analysis::SystemAnalysis, step::StepInfo)
     end
     
     analysis.last_update_step = analysis.current_step
+    analysis.last_update_t = step.t
+    analysis.last_reject_count = step.rejects
     @info "[Frankenstein] Results: Stiffness=$(round(analysis.stiffness_ratio, digits=2)) | Coupling=$(round(analysis.coupling_strength, digits=2))"
     
     return nothing

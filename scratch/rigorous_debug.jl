@@ -28,7 +28,7 @@ println("Detected sparsity: ", analysis.is_sparse)
 pattern_analysis = analysis.sparsity_pattern
 println("Analysis Pattern nnz: ", pattern_analysis !== nothing ? nnz(pattern_analysis) : "nothing")
 
-println("\n2. Comparing with SparseDiffTools.jacobian_sparsity directly...")
+println("2. Comparing with SparseDiffTools.jacobian_sparsity directly...")
 ad_func = (u) -> begin
     du = similar(u)
     sparse_f!(du, u, prob.p, prob.tspan[1])
@@ -48,7 +48,7 @@ if pattern_analysis !== nothing && pattern_direct !== nothing
     end
 end
 
-println("\n3. Inspecting ODEFunction in Frankenstein.MonsterSolver...")
+println("3. Inspecting ODEFunction in Frankenstein.MonsterSolver...")
 # Simulate what MonsterSolver does
 raw_f = prob.f isa SciMLBase.ODEFunction ? prob.f.f : prob.f
 new_f = SciMLBase.ODEFunction(raw_f; 
@@ -57,7 +57,7 @@ new_f = SciMLBase.ODEFunction(raw_f;
 
 println("new_f.jac_prototype nnz: ", new_f.jac_prototype !== nothing ? nnz(new_f.jac_prototype) : "nothing")
 
-println("\n4. Attempting to build a ForwardDiffColorJacobianCache manually...")
+println("4. Attempting to build a ForwardDiffColorJacobianCache manually...")
 try
     # Using the same logic as SciML/OrdinaryDiffEq would use
     if new_f.jac_prototype !== nothing
@@ -84,7 +84,7 @@ try
         println("Update successful!")
     end
 catch e
-    println("\nCAUGHT ERROR:")
+    println("CAUGHT ERROR:")
     showerror(stdout, e)
     println()
 end

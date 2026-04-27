@@ -1,0 +1,185 @@
+  Activating project at `C:\Users\jelte\projects\Frankenstein`
+[ Info: Testing Frankenstein on Lorenz (Non-Stiff)
+[ Info: [Frankenstein Analysis] System Size: 3 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with Tsit5{typeof(OrdinaryDiffEqCore.trivial_limiter!), typeof(OrdinaryDiffEqCore.trivial_limiter!), Static.False}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing Frankenstein on Van der Pol (μ=10, Mildly Stiff)
+[ Info: [Frankenstein Analysis] System Size: 2 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with ImplicitEuler{0, AutoSymbolics, Nothing, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: [Frankenstein] Initial solver configuration failed: FunctionWrappersWrappers.NoFunctionWrapperFoundError(). Pivoting...
+└ @ Frankenstein.MonsterSolver C:\Users\jelte\projects\Frankenstein\src\MonsterSolver.jl:87
+[ Info: [Frankenstein] Pulse detected anomaly at t=9.026707000655849. Performing heavy diagnostics...
+[ Info: [Frankenstein] 🛰️ Heavy Diagnostic Triggered at t=9.026707000655849
+┌ Warning: Automatic differentiation failed: FunctionWrappersWrappers.NoFunctionWrapperFoundError(). Using finite differences.
+└ @ Frankenstein.Utilities.Jacobians C:\Users\jelte\projects\Frankenstein\src\utilities\jacobians.jl:67
+[ Info: [Frankenstein] Results: Stiffness=1.95 | Coupling=0.98
+[ Info: [Frankenstein] Pulse detected anomaly at t=18.6102635264641. Performing heavy diagnostics...
+[ Info: [Frankenstein] 🛰️ Heavy Diagnostic Triggered at t=18.6102635264641
+┌ Warning: Automatic differentiation failed: FunctionWrappersWrappers.NoFunctionWrapperFoundError(). Using finite differences.
+└ @ Frankenstein.Utilities.Jacobians C:\Users\jelte\projects\Frankenstein\src\utilities\jacobians.jl:67
+[ Info: [Frankenstein] Results: Stiffness=1.43 | Coupling=1.0
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing Frankenstein on Van der Pol (μ=1000, Highly Stiff)
+[ Info: [Frankenstein Analysis] System Size: 2 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with Rodas5P{0, AutoForwardDiff{nothing, Nothing}, Nothing, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!), typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing Frankenstein on ROBER (Extreme Stiffness)
+[ Info: [Frankenstein Analysis] System Size: 3 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with ImplicitEuler{0, AutoSymbolics, Nothing, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: [Frankenstein] Initial solver configuration failed: FunctionWrappersWrappers.NoFunctionWrapperFoundError(). Pivoting...
+└ @ Frankenstein.MonsterSolver C:\Users\jelte\projects\Frankenstein\src\MonsterSolver.jl:87
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing Frankenstein on Large Sparse 1D PDE (N=200)
+[ Info: [Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy.
+[ Info: [Frankenstein Analysis] System Size: 200 | Sparse: true | Density: 1.5%
+[ Info: [Frankenstein Debug] Top 5 Recs for N=200:
+[ Info:   - TRBDF2 (Category: SPARSE) -> Priority: 12.933803447776022
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 12.593803447776024
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 12.493803447776024
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 12.588592145121801
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 11.088592145121801
+[ Info: [Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling.
+[ Info: [Frankenstein] Initializing with TRBDF2{0, AutoSparse{AutoFiniteDiff{Val{:forward}, Val{:forward}, Val{:hcentral}, Nothing, Nothing, Bool}, Frankenstein.Backends.PrecomputedSparsityDetector{SparseMatrixCSC{Float64, Int64}}, SparseMatrixColorings.GreedyColoringAlgorithm{:direct, 1, Tuple{SparseMatrixColorings.NaturalOrder}}}, UMFPACKFactorization, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Sparse AD: Exploiting 1.5% density for PDE-optimal scaling.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: --- Benchmarking: 2D Heat (100% Diffusion) ---
+[ Info: [Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy.
+[ Info: [Frankenstein Analysis] System Size: 2500 | Sparse: true | Density: 0.2%
+[ Info: [Frankenstein Debug] Top 5 Recs for N=2500:
+[ Info:   - TRBDF2 (Category: COMPOSITE) -> Priority: 17.55458427135025
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 11.643203652634519
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 11.543203652634517
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 11.660247894154821
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 10.160247894154821
+[ Info: [Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling.
+[ Info: [Frankenstein] Initializing with TRBDF2{0, AutoSparse{AutoFiniteDiff{Val{:forward}, Val{:forward}, Val{:hcentral}, Nothing, Nothing, Bool}, Frankenstein.Backends.PrecomputedSparsityDetector{SparseMatrixCSC{Float64, Int64}}, SparseMatrixColorings.GreedyColoringAlgorithm{:direct, 1, Tuple{SparseMatrixColorings.NaturalOrder}}}, KLUFactorization, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Sparse AD: Exploiting 0.2% density for PDE-optimal scaling.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: --- Benchmarking: 2D Wave Equation ---
+[ Info: [Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy.
+[ Info: [Frankenstein Analysis] System Size: 1250 | Sparse: true | Density: 0.31%
+[ Info: [Frankenstein Debug] Top 5 Recs for N=1250:
+[ Info:   - TRBDF2 (Category: COMPOSITE) -> Priority: 17.886429346346866
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 11.82986650732011
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 11.72986650732011
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 11.836540590246772
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 10.336540590246772
+[ Info: [Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling.
+[ Info: [Frankenstein] Initializing with TRBDF2{0, AutoSparse{AutoFiniteDiff{Val{:forward}, Val{:forward}, Val{:hcentral}, Nothing, Nothing, Bool}, Frankenstein.Backends.PrecomputedSparsityDetector{SparseMatrixCSC{Float64, Int64}}, SparseMatrixColorings.GreedyColoringAlgorithm{:direct, 1, Tuple{SparseMatrixColorings.NaturalOrder}}}, KLUFactorization, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Sparse AD: Exploiting 0.31% density for PDE-optimal scaling.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: --- Benchmarking: Burgers' Equation ---
+[ Info: [Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy.
+[ Info: [Frankenstein Analysis] System Size: 900 | Sparse: true | Density: 0.54%
+[ Info: [Frankenstein Debug] Top 5 Recs for N=900:
+[ Info:   - TRBDF2 (Category: SPARSE) -> Priority: 10.6
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 10.25
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 10.15
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 10.05
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 8.75
+[ Info: [Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling.
+[ Info: [Frankenstein] Initializing with TRBDF2{0, AutoSparse{AutoFiniteDiff{Val{:forward}, Val{:forward}, Val{:hcentral}, Nothing, Nothing, Bool}, Frankenstein.Backends.PrecomputedSparsityDetector{SparseMatrixCSC{Float64, Int64}}, SparseMatrixColorings.GreedyColoringAlgorithm{:direct, 1, Tuple{SparseMatrixColorings.NaturalOrder}}}, KLUFactorization, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Sparse AD: Exploiting 0.54% density for PDE-optimal scaling.
+[ Info: [Pulse] Trigger: Border Crossing DOWN (44.65593421651186 < 100.0)
+[ Info: [Frankenstein] Pulse detected anomaly at t=7.153429152264973e-5. Performing heavy diagnostics...
+[ Info: [Frankenstein] 🛰️ Heavy Diagnostic Triggered at t=7.153429152264973e-5
+[ Info: [Frankenstein] Results: Stiffness=65.94 | Coupling=0.0
+[ Info: 🔄 [Adaptation] Hysteresis Trigger: Stiffness lower threshold crossed (65.93914251644085 < 100.0). Re-evaluating algorithm...
+[ Info: [Frankenstein Debug] Top 5 Recs for N=900:
+[ Info:   - TRBDF2 (Category: SPARSE) -> Priority: 10.6
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 10.25
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 10.15
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 10.05
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 8.75
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: --- Benchmarking: ADR Equation ---
+[ Info: [Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy.
+[ Info: [Frankenstein Analysis] System Size: 625 | Sparse: true | Density: 0.77%
+[ Info: [Frankenstein Debug] Top 5 Recs for N=625:
+[ Info:   - TRBDF2 (Category: SPARSE) -> Priority: 10.6
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 10.25
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 10.15
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 10.05
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 8.75
+[ Info: [Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling.
+[ Info: [Frankenstein] Initializing with TRBDF2{0, AutoSparse{AutoFiniteDiff{Val{:forward}, Val{:forward}, Val{:hcentral}, Nothing, Nothing, Bool}, Frankenstein.Backends.PrecomputedSparsityDetector{SparseMatrixCSC{Float64, Int64}}, SparseMatrixColorings.GreedyColoringAlgorithm{:direct, 1, Tuple{SparseMatrixColorings.NaturalOrder}}}, KLUFactorization, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Sparse AD: Exploiting 0.77% density for PDE-optimal scaling.
+[ Info: [Pulse] Trigger: Border Crossing DOWN (29.818182613210027 < 100.0)
+[ Info: [Frankenstein] Pulse detected anomaly at t=2.928441159190857e-5. Performing heavy diagnostics...
+[ Info: [Frankenstein] 🛰️ Heavy Diagnostic Triggered at t=2.928441159190857e-5
+[ Info: [Frankenstein] Results: Stiffness=49.1 | Coupling=0.0
+[ Info: 🔄 [Adaptation] Hysteresis Trigger: Stiffness lower threshold crossed (49.09595254859857 < 100.0). Re-evaluating algorithm...
+[ Info: [Frankenstein Debug] Top 5 Recs for N=625:
+[ Info:   - TRBDF2 (Category: SPARSE) -> Priority: 10.6
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 10.25
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 10.15
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 10.05
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 8.75
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: --- Benchmarking: Gray-Scott Equation ---
+[ Info: [Frankenstein Analysis] Large system detected. Using sparse heuristics and opnorm proxy.
+[ Info: [Frankenstein Analysis] System Size: 1800 | Sparse: true | Density: 0.54%
+[ Info: [Frankenstein Debug] Top 5 Recs for N=1800:
+[ Info:   - TRBDF2 (Category: COMPOSITE) -> Priority: 17.371991874847865
+[ Info:   - FBDF (Category: SPARSE) -> Priority: 11.540495429601924
+[ Info:   - KenCarp4 (Category: SPARSE) -> Priority: 11.440495429601924
+[ Info:   - QNDF (Category: SPARSE) -> Priority: 11.563245683512928
+[ Info:   - Rosenbrock23 (Category: SPARSE) -> Priority: 10.063245683512928
+[ Info: [Frankenstein] Injecting Sparse FiniteDiff and Greedy Coloring for robust sparse handling.
+[ Info: [Frankenstein] Initializing with TRBDF2{0, AutoSparse{AutoFiniteDiff{Val{:forward}, Val{:forward}, Val{:hcentral}, Nothing, Nothing, Bool}, Frankenstein.Backends.PrecomputedSparsityDetector{SparseMatrixCSC{Float64, Int64}}, SparseMatrixColorings.GreedyColoringAlgorithm{:direct, 1, Tuple{SparseMatrixColorings.NaturalOrder}}}, KLUFactorization, NLNewton{Rational{Int64}, Rational{Int64}, Rational{Int64}, Nothing}, typeof(OrdinaryDiffEqCore.DEFAULT_PRECS), Val{:forward}(), true, nothing, typeof(OrdinaryDiffEqCore.trivial_limiter!)}
+[ Info: [Frankenstein] Backend selection: Sparse AD: Exploiting 0.54% density for PDE-optimal scaling.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing Memory Preference
+[ Info: [Frankenstein Analysis] System Size: 3 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with Tsit5{typeof(OrdinaryDiffEqCore.trivial_limiter!), typeof(OrdinaryDiffEqCore.trivial_limiter!), Static.False}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing Stability Preference
+[ Info: [Frankenstein Analysis] System Size: 3 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with Tsit5{typeof(OrdinaryDiffEqCore.trivial_limiter!), typeof(OrdinaryDiffEqCore.trivial_limiter!), Static.False}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+[ Info: Testing High Accuracy (1e-12)
+[ Info: [Frankenstein Analysis] System Size: 3 | Sparse: false | Density: 100.0%
+[ Info: [Frankenstein] Initializing with Tsit5{typeof(OrdinaryDiffEqCore.trivial_limiter!), typeof(OrdinaryDiffEqCore.trivial_limiter!), Static.False}
+[ Info: [Frankenstein] Backend selection: Symbolics: Exact analytical precision for small-kernel system.
+┌ Warning: Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information
+└ @ SciMLBase C:\Users\jelte\.julia\packages\SciMLBase\wfZCo\src\retcodes.jl:448
+  [Native] Time: 1.6974s | Steps: 98 | Retcode: Success
+  [Monster] Time: 4.4788s | Steps: 21 | Retcode: Success
+  >> Native is 2.64x FASTER
+------------------------------------------
+  [Native] Time: 0.4733s | Steps: 127 | Retcode: Success
+  [Monster] Time: 4.3836s | Steps: 51 | Retcode: Success
+  >> Native is 9.26x FASTER
+------------------------------------------
+  [Native] Time: 0.0888s | Steps: 8 | Retcode: Success
+  [Monster] Time: 4.5135s | Steps: 20 | Retcode: Success
+  >> Native is 50.83x FASTER
+------------------------------------------
+  [Native] Time: 0.0812s | Steps: 14 | Retcode: Success
+  [Monster] Time: 4.6411s | Steps: 15 | Retcode: Success
+  >> Native is 57.14x FASTER
+------------------------------------------
+  [Native] Time: 1.7594s | Steps: 141 | Retcode: Success
+  [Monster] Time: 4.1474s | Steps: 33 | Retcode: Success
+  >> Native is 2.36x FASTER
+------------------------------------------
+Test Summary:                            | Pass  Total     Time
+Frankenstein.jl Comprehensive Test Suite |   18     18  2m38.7s

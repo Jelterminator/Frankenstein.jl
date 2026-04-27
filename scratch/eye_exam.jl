@@ -20,12 +20,12 @@ function eye_exam()
         result = detector(prob)
         
         if result === nothing
-            println("\nRESULT: ❌ DETECTOR FOUND NOTHING")
+            println("RESULT: ❌ DETECTOR FOUND NOTHING")
         else
-            println("\nRESULT: ✅ DETECTOR FOUND SPARSITY: ", typeof(result), " (nnz=$(nnz(result)))")
+            println("RESULT: ✅ DETECTOR FOUND SPARSITY: ", typeof(result), " (nnz=$(nnz(result)))")
         end
     catch e
-        println("\nERROR CALLING DETECTOR: ", e)
+        println("ERROR CALLING DETECTOR: ", e)
     end
 end
 

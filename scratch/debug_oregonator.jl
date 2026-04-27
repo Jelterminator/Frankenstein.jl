@@ -18,11 +18,11 @@ try
     println("Success!")
 catch e
     st = stacktrace(catch_backtrace())
-    println("\n!!! ERROR SUMMARY !!!")
+    println("!!! ERROR SUMMARY !!!")
     println("REPEATED FOR TRUNCATION SAFETY:")
     for _ in 1:20
         println("ERROR: ", e)
     end
-    println("-----------------------\n")
+    println("-----------------------")
     Base.show_backtrace(stdout, catch_backtrace())
 end

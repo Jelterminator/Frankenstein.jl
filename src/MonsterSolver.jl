@@ -21,7 +21,7 @@ The central adaptive loop for Frankenstein. It initializes an integrator,
 steps through the problem, and performs 'surgery' (algorithm swapping)
 when the adaptation logic dictates.
 """
-function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
+function monster_solve!(prob::SciMLBase.ODEProblem, Fs::FCore.FrankensteinSolver; kwargs...)
     # 0. Separate Frankenstein keywords from SciML keywords
     frankenstein_kwargs = filter(x -> x.first in (:prefer_memory, :prefer_stability, :max_retries, :ad_available), kwargs)
     sciml_kwargs = filter(x -> !(x.first in (:prefer_memory, :prefer_stability, :max_retries, :ad_available)), kwargs)
@@ -31,6 +31,7 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     
     # 2. Robust preparation: Standardize the ODEFunction
     raw_f = prob.f isa SciMLBase.ODEFunction ? prob.f.f : prob.f
+    Fs.original_f = raw_f
     
     # Detect the correct pattern to use
     new_pattern = if analysis.is_sparse && analysis.sparsity_pattern !== nothing
@@ -56,6 +57,7 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
     
     # 3. Initial Configuration
     rec = select_algorithm(analysis; frankenstein_kwargs...)
+    analysis.current_category = rec.category
     
     # Select technical backends
     ad_available = get(frankenstein_kwargs, :ad_available, 
@@ -118,18 +120,39 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
                 # New recommendation based on current state
                 new_rec = Adaptation.adapt!(controller, analysis, step_info)
                 
-                if new_rec !== nothing && typeof(new_rec.algorithm) != typeof(cfg.algorithm)
-                    @info "[Frankenstein] Surgery recommended: $(typeof(new_rec.algorithm)). Swapping..."
-                    
-                    new_backend_selection = Backends.choose_backend(analysis, ad_available; 
-                                                                  disabled_backends=Fs.disabled_backends)
-                    
-                    new_cfg = create_solver_configuration(new_rec, analysis, new_backend_selection)
-                    
-                    # Perform the surgical swap
-                    integrator = reinit_with_new_alg(integrator, new_cfg.algorithm, integrator.u, integrator.t, sciml_kwargs)
-                    cfg = new_cfg # Update current config
-                    @info "[Frankenstein] Surgery Successful! Pivoting to: $(typeof(cfg.algorithm))"
+                # COOL-DOWN: Don't trigger surgery if we just had one (< 50 steps ago)
+                # unless there is a rejection (emergency)
+                cooldown_active = (analysis.current_step - analysis.last_surgery_step) < 50
+                
+                if new_rec !== nothing && !(cfg.algorithm isa new_rec.algorithm)
+                    if cooldown_active && step_info.rejects <= analysis.last_reject_count
+                        @debug "[Frankenstein] Surgery recommended but blocked by cooldown ($(analysis.current_step - analysis.last_surgery_step) steps since last)."
+                    else
+                        @info "✂️ [Frankenstein] SURGERY RECOMMENDED: $(typeof(cfg.algorithm)) ➔ $(new_rec.algorithm)"
+                        @info "🏥 [Frankenstein] Rationale: $(new_rec.description)"
+                        
+                        new_backend_selection = Backends.choose_backend(analysis, ad_available; 
+                                                                    disabled_backends=Fs.disabled_backends)
+                        
+                        new_cfg = create_solver_configuration(new_rec, analysis, new_backend_selection)
+                        
+                        # Perform the surgical swap
+                        integrator = reinit_with_new_alg(integrator, Fs, new_cfg.algorithm, integrator.u, integrator.t, sciml_kwargs)
+                        cfg = new_cfg # Update current config
+                        analysis.current_category = new_rec.category
+                        @info "💉 [Frankenstein] Surgery Successful! Patient stabilized with: $(typeof(cfg.algorithm))"
+                        
+                        # Reset cooldown and track surgery
+                        analysis.last_surgery_step = analysis.current_step
+                        analysis.diagnostic_cooldown = 50 
+                        analysis.watchdog_interval = 10000 # Reset watchdog on surgery
+                    end
+                else
+                    # BACK-OFF: If we performed a diagnostic but decided NO surgery is needed,
+                    # increase the cooldown and watchdog interval so we don't spam diagnostics for a stable system.
+                    analysis.diagnostic_cooldown = min(1000, analysis.diagnostic_cooldown * 2)
+                    analysis.watchdog_interval = min(100000, analysis.watchdog_interval * 2) # Iteratively longer watchdog
+                    @debug "[Frankenstein] No surgery needed. Backing off: cooldown=$(analysis.diagnostic_cooldown), watchdog=$(analysis.watchdog_interval)"
                 end
             end
             
@@ -162,9 +185,13 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
             ad_available_filtered = filter(b -> !(string(typeof(b)) in keys(Fs.disabled_backends)), ad_available)
             backend_selection = Backends.choose_backend(analysis, ad_available_filtered; 
                 disabled_backends=Fs.disabled_backends)
-            cfg = create_solver_configuration(rec, analysis, backend_selection)
             
-            integrator = reinit_with_new_alg(integrator, cfg.algorithm, integrator.u, integrator.t, sciml_kwargs)
+            # Use new_rec if adaptation recommended something, otherwise fallback to previous rec
+            actual_rec = new_rec !== nothing ? new_rec : rec
+            cfg = create_solver_configuration(actual_rec, analysis, backend_selection)
+            analysis.current_category = actual_rec.category
+            
+            integrator = reinit_with_new_alg(integrator, Fs, cfg.algorithm, integrator.u, integrator.t, sciml_kwargs)
             @info "[Frankenstein] Attempting recovery with: $(backend_selection.selection_rationale)"
         end
     end
@@ -173,14 +200,23 @@ function monster_solve!(prob::ODEProblem, Fs::FrankensteinSolver; kwargs...)
 end
 
 # Internal helpers for surgery
-function reinit_with_new_alg(integrator, new_alg, u, t, sciml_kwargs)
+function reinit_with_new_alg(integrator, Fs::FrankensteinSolver, new_alg, u, t, sciml_kwargs)
     prob = integrator.sol.prob
-    new_prob = SciMLBase.remake(prob, u0 = u, tspan = (t, prob.tspan[end]))
+    
+    # Use the original stored function to avoid FunctionWrappersWrappers conflicts
+    raw_f = Fs.original_f
+    
+    clean_f = SciMLBase.ODEFunction{SciMLBase.isinplace(prob.f)}(raw_f; 
+                                   jac_prototype = hasproperty(prob.f, :jac_prototype) ? prob.f.jac_prototype : nothing,
+                                   sparsity = hasproperty(prob.f, :sparsity) ? prob.f.sparsity : nothing)
+    
+    new_prob = SciMLBase.remake(prob, f = clean_f, u0 = u, tspan = (t, prob.tspan[end]))
     
     # Preserve key properties
     reltol = integrator.opts.reltol
     abstol = integrator.opts.abstol
     
+    @info "💉 [Frankenstein] Re-initializing with $(SciMLBase.isinplace(new_prob.f) ? "in-place" : "out-of-place") function and $(typeof(new_alg))"
     return init(new_prob, new_alg; reltol=reltol, abstol=abstol, sciml_kwargs...)
 end
 
@@ -202,14 +238,4 @@ end
 
 end # module
 
-# Extend SciMLBase to support solve(prob, FrankensteinSolver())
-import SciMLBase
-import .MonsterSolver: monster_solve!
-
-function SciMLBase.solve(prob::SciMLBase.ODEProblem, Fs::Frankenstein.FCore.FrankensteinSolver; kwargs...)
-    return monster_solve!(prob, Fs; kwargs...)
-end
-
-function SciMLBase.__solve(prob::SciMLBase.ODEProblem, Fs::Frankenstein.FCore.FrankensteinSolver; kwargs...)
-    return monster_solve!(prob, Fs; kwargs...)
-end
+# Dispatch is handled in Frankenstein.jl

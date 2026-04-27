@@ -24,7 +24,7 @@ try
     sol = Frankenstein.solve(prob, solver, ad_available=[AutoSymbolics()])
     println("Solve successful!")
 catch e
-    println("\nCAUGHT ERROR:")
+    println("CAUGHT ERROR:")
     # Print the full error and stack trace
     showerror(stdout, e)
     println()

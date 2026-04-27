@@ -4,6 +4,8 @@ module Adaptation
 
 using ..FCore: AbstractAdaptationStrategy, AdaptationState, SystemAnalysis, StepInfo, AlgorithmRecommendation, compute_adjusted_priority
 
+function adapt! end
+
 # Include individual adaptation strategy modules
 include("performance_adaptation.jl")
 include("stability_adaptation.jl")

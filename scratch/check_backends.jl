@@ -9,7 +9,7 @@ catch e
     println("Caught error: ", e)
 end
 
-println("\nChecking for ADTypes.AutoSparse...")
+println("Checking for ADTypes.AutoSparse...")
 try
     println("AutoSparse exists.")
 catch e

@@ -4,7 +4,33 @@ using LinearAlgebra, ForwardDiff, SciMLBase
 using ...FCore: SystemAnalysis, StepInfo
 using ...Utilities.Jacobians: compute_jacobian
 
-export initial_stiffness_estimate, update_stiffness!
+export initial_stiffness_estimate, update_stiffness!, cheap_spectral_radius_estimate
+
+"""
+    cheap_spectral_radius_estimate(f, u, p, t; ϵ=1e-8) -> Float64
+Estimate the spectral radius using a single JVP (Jacobian-Vector Product).
+This is O(N) and does not require a Jacobian.
+"""
+function cheap_spectral_radius_estimate(f, u, p, t; ϵ=1e-8)
+    # v is a random perturbation
+    v = randn(eltype(u), length(u))
+    v /= norm(v)
+    
+    # J*v ≈ (f(u + ϵ*v) - f(u)) / ϵ
+    if SciMLBase.isinplace(f)
+        fu = similar(u)
+        fuv = similar(u)
+        f(fu, u, p, t)
+        f(fuv, u + ϵ*v, p, t)
+        jv = (fuv - fu) / ϵ
+    else
+        fu = f(u, p, t)
+        fuv = f(u + ϵ*v, p, t)
+        jv = (fuv - fu) / ϵ
+    end
+    
+    return norm(jv)
+end
 
 """
     initial_stiffness_estimate(f, u0, p; J0=nothing) -> Float64
@@ -58,8 +84,8 @@ function update_stiffness!(analysis::SystemAnalysis, step_info::StepInfo)
     prob = step_info.prob
     f = prob.f
     
-    # Update Jacobian if it's been too long or we have many rejects
-    if analysis.current_step - analysis.last_jacobian_update > 20 || step_info.rejects > 2
+    # Update Jacobian if it's been too long (Throttle: 100 steps) or we have many rejects
+    if analysis.current_step - analysis.last_jacobian_update > 100 || step_info.rejects > 3
         analysis.jacobian = compute_jacobian(f, u, p, t)
         analysis.last_jacobian_update = analysis.current_step
     end

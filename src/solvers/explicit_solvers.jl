@@ -2,7 +2,7 @@ module ExplicitSolvers
 
 using DifferentialEquations
 using OrdinaryDiffEq
-using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, EXPLICIT
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, SS_EXTREME_SYSTEM, EXPLICIT, STABILIZED_EXPLICIT
 
 # Re-export key types/functions to Solvers if needed
 export ExplicitSolverStrategy, get_explicit_recommendations, select_best_explicit
@@ -186,6 +186,35 @@ function create_explicit_algorithms()
             memory_efficiency=0.8, computational_cost=0.35, stability_score=0.82,
             stiffness_range=(SL_NON_STIFF, SL_NON_STIFF),
             description="Owren-Zennaro optimized 5th order method"
+        ),
+
+        # Stabilized Explicit Methods (Category: STABILIZED_EXPLICIT)
+        AlgorithmRecommendation(
+            ROCK4, 8.5, STABILIZED_EXPLICIT;
+            min_accuracy=1e-8, max_accuracy=1e-2,
+            memory_efficiency=0.9, computational_cost=0.45, stability_score=0.95,
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_MEDIUM_SYSTEM, SS_EXTREME_SYSTEM),
+            description="4th order Orthogonal Runge-Kutta - huge stability region for large mildly stiff systems",
+            references=["Abdulle, A. (2002). Fourth order Chebyshev methods"]
+        ),
+
+        AlgorithmRecommendation(
+            ROCK2, 8.2, STABILIZED_EXPLICIT;
+            min_accuracy=1e-6, max_accuracy=1e-2,
+            memory_efficiency=0.92, computational_cost=0.4, stability_score=0.92,
+            stiffness_range=(SL_MILDLY_STIFF, SL_STIFF),
+            system_size_range=(SS_MEDIUM_SYSTEM, SS_EXTREME_SYSTEM),
+            description="2nd order ROCK method - very efficient for low-accuracy stabilized integration"
+        ),
+
+        AlgorithmRecommendation(
+            ESERK5, 8.0, STABILIZED_EXPLICIT;
+            min_accuracy=1e-6, max_accuracy=1e-2,
+            memory_efficiency=0.95, computational_cost=0.4, stability_score=0.98,
+            stiffness_range=(SL_MILDLY_STIFF, SL_VERY_STIFF),
+            system_size_range=(SS_LARGE_SYSTEM, SS_EXTREME_SYSTEM),
+            description="Extrapolated stabilized explicit Runge-Kutta - extremely robust for large scale systems"
         )
 
     ]
@@ -209,9 +238,9 @@ function get_explicit_recommendations(analysis::SystemAnalysis;
                                     prefer_stability::Bool=true,
                                     strategy::ExplicitSolverStrategy=ExplicitSolverStrategy())
     
-    # Only recommend explicit methods for non-SL_STIFF problems
+    # Only recommend explicit/stabilized methods for suitable problems
     stiffness = classify_stiffness(analysis)
-    if stiffness != SL_NON_STIFF
+    if stiffness == SL_VERY_STIFF || stiffness == SL_EXTREMELY_STIFF
         return AlgorithmRecommendation[]
     end
     

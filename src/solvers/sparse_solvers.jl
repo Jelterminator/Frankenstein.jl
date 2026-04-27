@@ -2,7 +2,7 @@
 
 module SparseSolvers
 
-using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, SPARSE
+using ..FCore: SystemAnalysis, AbstractSolverStrategy, AlgorithmRecommendation, SolverCategory, StiffnessLevel, SystemSize, AccuracyLevel, is_applicable, compute_adjusted_priority, classify_stiffness, classify_system_size, classify_accuracy_level, requires_sparse_handling, is_well_conditioned, has_multiscale_behavior, SL_NON_STIFF, SL_MILDLY_STIFF, SL_STIFF, SL_VERY_STIFF, SL_EXTREMELY_STIFF, SS_SMALL_SYSTEM, SS_MEDIUM_SYSTEM, SS_LARGE_SYSTEM, SS_EXTREME_SYSTEM, SPARSE, STABILIZED_EXPLICIT
 using OrdinaryDiffEq
 using LinearSolve
 using SparseArrays
@@ -26,19 +26,7 @@ end
 
 function build_sparse_solver_catalogue()
     AlgorithmRecommendation[
-        AlgorithmRecommendation(FBDF, 9.5, SPARSE;
-            description = "FBDF with sparse direct linear solver. Highly robust for large sparse systems.",
-            handles_sparse = true,
-            stability_score = 0.9,
-            computational_cost = 0.5),
-
-        AlgorithmRecommendation(QNDF, 9.3, SPARSE;
-            description = "QNDF with sparse direct solver. Good alternative to FBDF.",
-            handles_sparse = true,
-            stability_score = 0.85,
-            computational_cost = 0.5),
-        
-        AlgorithmRecommendation(TRBDF2, 8.5, SPARSE;
+        AlgorithmRecommendation(TRBDF2, 9.2, SPARSE;
             description = "TRBDF2 with sparse linear solver using KLUFactorization.",
             handles_sparse = true,
             stability_score = 0.9,
@@ -46,19 +34,31 @@ function build_sparse_solver_catalogue()
             computational_cost = 0.4,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
 
+        AlgorithmRecommendation(QNDF, 9.0, SPARSE;
+            description = "QNDF with sparse direct solver. Good alternative to FBDF.",
+            handles_sparse = true,
+            stability_score = 0.85,
+            computational_cost = 0.5),
+
+        AlgorithmRecommendation(FBDF, 8.9, SPARSE;
+            description = "FBDF with sparse direct linear solver. Highly robust for large sparse systems.",
+            handles_sparse = true,
+            stability_score = 0.9,
+            computational_cost = 0.5),
+        
+        AlgorithmRecommendation(KenCarp4, 8.8, SPARSE;
+            description = "KenCarp4 IMEX scheme with sparse linear solver support.",
+            handles_sparse = true,
+            stability_score = 0.9,
+            computational_cost = 0.5,
+            references = ["Kennedy & Carpenter (2003)"]),
+
         AlgorithmRecommendation(Rosenbrock23, 7.5, SPARSE;
             description = "Rosenbrock23 method with sparse KLU solver.",
             handles_sparse = true,
             stability_score = 0.85,
             computational_cost = 0.5,
             references = ["https://github.com/SciML/OrdinaryDiffEq.jl"]),
-
-        AlgorithmRecommendation(KenCarp4, 7.0, SPARSE;
-            description = "KenCarp4 IMEX scheme with sparse linear solver support.",
-            handles_sparse = true,
-            stability_score = 0.9,
-            computational_cost = 0.5,
-            references = ["Kennedy & Carpenter (2003)"]),
     ]
 end
 

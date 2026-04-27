@@ -27,4 +27,13 @@ export FrankensteinSolver, SolverConfiguration, Monster, solve, analyze_system
 # We use 'Monster' instead of 'Frankenstein' to avoid conflict with the module name.
 Monster() = FrankensteinSolver()
 
+# SciML Integration dispatches
+function SciMLBase.solve(prob::SciMLBase.ODEProblem, Fs::FrankensteinSolver; kwargs...)
+    return monster_solve!(prob, Fs; kwargs...)
+end
+
+function SciMLBase.__solve(prob::SciMLBase.ODEProblem, Fs::FrankensteinSolver; kwargs...)
+    return monster_solve!(prob, Fs; kwargs...)
+end
+
 end

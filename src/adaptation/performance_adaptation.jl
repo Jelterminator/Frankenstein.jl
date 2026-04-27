@@ -18,10 +18,14 @@ end
 
 
 
+import ..adapt!
+
 function adapt!(strategy::PerformanceAdaptationStrategy, analysis::SystemAnalysis, step::StepInfo)
     # If the solver is cruising (no rejects, dt is large), look for performance gains
-    if step.rejects == 0 && step.dt > 1e-4
-        return select_algorithm(analysis; prefer_memory=false, prefer_stability=false)
+    if step.rejects == analysis.last_reject_count && step.dt > 1e-4
+        # Stability-based transitions are now handled by the StabilityAdaptation Schmitt trigger
+        # Performance adaptation can be extended here for things like internal tolerances or backend tweaks.
+        return nothing
     end
     return nothing
 end

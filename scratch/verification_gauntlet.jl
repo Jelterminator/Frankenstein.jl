@@ -21,7 +21,7 @@ function run_gauntlet()
     flush(stdout)
 
     # --- Benchmark 1: Oregonator ---
-    println("\n[Benchmark 1] Oregonator (Small & Stiff)")
+    println("[Benchmark 1] Oregonator (Small & Stiff)")
     function oregonator!(du, u, p, t)
         s, w, q = 77.27, 0.161, 8.375e-6
         du[1] = s*(u[2] + u[1]*(1.0 - q*u[1] - u[2]))
@@ -36,7 +36,7 @@ function run_gauntlet()
     println("  Success: sol_oregon retcode = $(sol_oregon.retcode)")
 
     # --- Benchmark 2: Kuramoto ---
-    println("\n[Benchmark 2] Kuramoto (100% Dense, n=100)")
+    println("[Benchmark 2] Kuramoto (100% Dense, n=100)")
     let N=100, K=5.0
         ω = rand(N)
         function kuramoto!(du, u, p, t)
@@ -52,7 +52,7 @@ function run_gauntlet()
     end
 
     # --- Benchmark 3: 2D Heat ---
-    println("\n[Benchmark 3] 2D Heat (Sparse, n=900)")
+    println("[Benchmark 3] 2D Heat (Sparse, n=900)")
     let N=30, dx=1.0/(30+1), c=0.1/dx^2
         function heat!(du,u,p,t)
             for j in 1:N, i in 1:N
@@ -68,7 +68,7 @@ function run_gauntlet()
         println("  Success: sol_heat retcode = $(sol_heat.retcode)")
     end
 
-    println("\n=== GAUNTLET COMPLETE: FRANKENSTEIN IS ASCENDED ===")
+    println("=== GAUNTLET COMPLETE: FRANKENSTEIN IS ASCENDED ===")
 end
 
 run_gauntlet()

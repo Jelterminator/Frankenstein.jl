@@ -46,7 +46,7 @@ function get_all_recommendations(analysis::SystemAnalysis; rtol::Float64=1e-6,
     # We keep the one with the highest priority if duplicates exist
     unique_recs = Dict{Any, AlgorithmRecommendation}()
     for rec in recs
-        alg_key = typeof(rec.algorithm)
+        alg_key = rec.algorithm
         if !haskey(unique_recs, alg_key) || rec.priority > unique_recs[alg_key].priority
             unique_recs[alg_key] = rec
         end
@@ -62,6 +62,12 @@ end
 function select_algorithm(analysis::SystemAnalysis; kwargs...)
     # Get all candidate recommendations
     recs = get_all_recommendations(analysis)
+    if !isempty(recs) && analysis.system_size >= 200
+        @info "[Frankenstein Debug] Top 5 Recs for N=$(analysis.system_size):"
+        for r in recs[1:min(5, length(recs))]
+            @info "  - $(r.algorithm) (Category: $(r.category)) -> Priority: $(compute_adjusted_priority(r, analysis))"
+        end
+    end
     return isempty(recs) ? nothing : first(recs)
 end
 

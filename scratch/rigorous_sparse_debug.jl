@@ -54,7 +54,7 @@ u0 = zeros(N*N)
 u0[div(N, 2) + N*div(N, 2)] = 1.0
 
 # 3. Sparsity Audit
-log_msg("\n--- Sparsity Audit ---")
+log_msg("--- Sparsity Audit ---")
 jp = laplacian_2d_sparsity(N)
 log_msg("jac_prototype size: $(size(jp))")
 log_msg("jac_prototype nnz: $(nnz(jp))")
@@ -76,7 +76,7 @@ if detected_jp !== nothing
 end
 
 # 4. Cache Creation Audit
-log_msg("\n--- Cache Creation Audit ---")
+log_msg("--- Cache Creation Audit ---")
 # Use the default coloring if the specific one fails to dispatch
 colorvec = try
     matrix_colors(jp)
@@ -96,7 +96,7 @@ catch e
 end
 
 # 5. Run Frankenstein and catch the error explicitly
-log_msg("\n--- Frankenstein Run Audit ---")
+log_msg("--- Frankenstein Run Audit ---")
 # We setup Frankenstein to use EXACTLY what we want
 f = ODEFunction(heat2d!, jac_prototype=jp)
 prob = ODEProblem(f, u0, (0.0, 0.1))
